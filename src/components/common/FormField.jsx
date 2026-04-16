@@ -1,0 +1,562 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { FileStack } from 'lucide-react'
+import { countries } from '../../data/countries.js'
+import { formatAcceptLabels } from '../../utils/fileFieldMeta.js'
+import { getSelectValues, normalizeSelectOptions } from '../../utils/formVisibility.js'
+
+function CountryCombobox({
+  field,
+  value,
+  onChange,
+  labelClasses,
+  inputClasses,
+  error,
+}) {
+  const { name, label, required, helper, placeholder } = field
+  const wrapperRef = useRef(null)
+  const [isOpen, setIsOpen] = useState(false)
+  const [query, setQuery] = useState(value ?? '')
+  const [activeIndex, setActiveIndex] = useState(-1)
+
+  useEffect(() => {
+    setQuery(value ?? '')
+  }, [value])
+
+  useEffect(() => {
+    function handleOutsideClick(event) {
+      if (!wrapperRef.current?.contains(event.target)) {
+        setIsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick)
+    }
+  }, [])
+
+  const filteredCountries = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) {
+      return countries
+    }
+
+    return countries.filter((country) => country.toLowerCase().includes(normalized))
+  }, [query])
+
+  function selectCountry(country) {
+    setQuery(country)
+    setIsOpen(false)
+    setActiveIndex(-1)
+    onChange(name, country)
+  }
+
+  function handleInputChange(event) {
+    const nextValue = event.target.value
+    setQuery(nextValue)
+    setIsOpen(true)
+    setActiveIndex(-1)
+    onChange(name, nextValue)
+  }
+
+  function handleKeyDown(event) {
+    if (!isOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      setIsOpen(true)
+      return
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (filteredCountries.length === 0) {
+        return
+      }
+      setActiveIndex((previous) =>
+        previous >= filteredCountries.length - 1 ? 0 : previous + 1,
+      )
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (filteredCountries.length === 0) {
+        return
+      }
+      setActiveIndex((previous) =>
+        previous <= 0 ? filteredCountries.length - 1 : previous - 1,
+      )
+    }
+
+    if (event.key === 'Enter' && isOpen && activeIndex >= 0) {
+      event.preventDefault()
+      selectCountry(filteredCountries[activeIndex])
+    }
+
+    if (event.key === 'Escape') {
+      setIsOpen(false)
+      setActiveIndex(-1)
+    }
+  }
+
+  return (
+    <label>
+      <span className={labelClasses}>
+        {label} {required ? <span className="text-red-500">*</span> : null}
+      </span>
+      <div className="mt-1.5" ref={wrapperRef}>
+        <input
+          className={`${inputClasses} ${error ? 'border-red-400 focus:border-red-500 focus:shadow-[0_0_0_4px_rgba(239,68,68,0.16)]' : ''}`}
+          type="text"
+          value={query}
+          required={required}
+          placeholder={placeholder ?? 'Search and select country'}
+          onChange={handleInputChange}
+          onFocus={() => setIsOpen(true)}
+          onKeyDown={handleKeyDown}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={isOpen}
+          aria-controls={`${name}-country-listbox`}
+          aria-autocomplete="list"
+        />
+
+        {isOpen ? (
+          <ul
+            id={`${name}-country-listbox`}
+            role="listbox"
+            className="z-30 mt-2 max-h-52 w-full overflow-y-auto rounded-xl border border-[#0A1628]/12 bg-white p-1.5 shadow-xl shadow-[#0A1628]/12 ring-1 ring-[#0A1628]/5"
+          >
+            {filteredCountries.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-[#0A1628]/55">No countries found</li>
+            ) : (
+              filteredCountries.map((country, index) => (
+                <li key={country}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                      index === activeIndex
+                        ? 'bg-gradient-to-r from-[#D4A843]/24 to-[#D4A843]/10 text-[#0A1628]'
+                        : 'text-[#0A1628]/85 hover:bg-[#D4A843]/12'
+                    }`}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectCountry(country)}
+                  >
+                    {country}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        ) : null}
+      </div>
+      {helper ? (
+        <small className="mt-1 block text-xs text-[#0A1628]/50">{helper}</small>
+      ) : null}
+      {error ? (
+        <small className="mt-1 block text-xs font-medium text-red-600">{error}</small>
+      ) : null}
+    </label>
+  )
+}
+
+function RepeatableBlock({ field, value, onChange, errors }) {
+  const defaultItem = field.defaultItem ?? {}
+  const items =
+    Array.isArray(value) && value.length > 0
+      ? value
+      : [typeof structuredClone === 'function' ? structuredClone(defaultItem) : { ...defaultItem }]
+
+  function updateRow(index, subName, subValue) {
+    const next = items.map((row, i) =>
+      i === index ? { ...row, [subName]: subValue } : row,
+    )
+    onChange(field.name, next)
+  }
+
+  function addRow() {
+    const blank =
+      typeof structuredClone === 'function' ? structuredClone(defaultItem) : { ...defaultItem }
+    onChange(field.name, [...items, blank])
+  }
+
+  function removeRow(index) {
+    if (items.length <= (field.minItems ?? 1)) {
+      return
+    }
+    onChange(
+      field.name,
+      items.filter((_, i) => i !== index),
+    )
+  }
+
+  return (
+    <div className="sm:col-span-2 space-y-4">
+      {field.sectionTitle ? (
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4A843]/20 to-[#D4A843]/5 shadow-sm">
+            <FileStack className="h-4 w-4 text-[#D4A843]" strokeWidth={2} />
+          </div>
+          <div>
+            <h3 className="text-xl font-semibold text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
+              {field.sectionTitle}
+            </h3>
+            {field.sectionSubtitle ? (
+              <p className="text-sm text-[#0A1628]/50">{field.sectionSubtitle}</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {field.sectionNote ? (
+        <div className="rounded-xl border border-blue-200/40 bg-blue-50/60 p-4">
+          <p className="text-sm leading-relaxed text-blue-800/70">{field.sectionNote}</p>
+        </div>
+      ) : null}
+
+      <div className="space-y-4">
+        {items.map((row, rowIndex) => (
+          <div
+            key={`${field.name}-${rowIndex}`}
+            className="relative rounded-xl border border-[#0A1628]/10 bg-white p-4 shadow-sm sm:p-5"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <span className="rounded-full bg-[#D4A843]/10 px-3 py-1 text-xs font-bold text-[#D4A843]">
+                {field.itemBadge} {rowIndex + 1}
+              </span>
+              {items.length > (field.minItems ?? 1) ? (
+                <button
+                  type="button"
+                  onClick={() => removeRow(rowIndex)}
+                  className="text-sm font-semibold text-red-500 hover:text-red-700"
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {(field.itemFields ?? []).map((sub) => (
+                <div
+                  key={sub.name}
+                  className={sub.fullWidth ? 'sm:col-span-2' : ''}
+                >
+                  <FormField
+                    field={sub}
+                    value={row[sub.name]}
+                    error={errors[`${field.name}__${rowIndex}__${sub.name}`]}
+                    onChange={(subName, subVal) => updateRow(rowIndex, subName, subVal)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={addRow}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#D4A843]/30 px-4 py-2.5 text-sm font-semibold text-[#D4A843] transition hover:border-[#D4A843]/50 hover:bg-[#D4A843]/5"
+      >
+        {field.addLabel ?? 'Add another'}
+      </button>
+    </div>
+  )
+}
+
+function FormField({ field, value, onChange, error }) {
+  const {
+    name,
+    label,
+    type,
+    required,
+    options = [],
+    helper,
+    placeholder,
+  } = field
+  const labelClasses = 'block text-sm font-semibold text-[#0A1628]/85'
+  const inputClasses =
+    'mt-1.5 w-full rounded-xl border border-[#0A1628]/10 bg-white px-3.5 py-2.5 text-sm text-[#0A1628] shadow-sm outline-none transition duration-300 placeholder:text-[#0A1628]/35 focus:border-[#D4A843] focus:shadow-[0_0_0_4px_rgba(212,168,67,0.18)]'
+
+  if (type === 'note') {
+    const isPlain = field.noteVariant === 'plain'
+    const isSub = field.noteVariant === 'sub'
+    return (
+      <div className="sm:col-span-2 space-y-2.5">
+        {field.noteBadge ? (
+          <span className="inline-block rounded-lg bg-[#D4A843]/12 px-2.5 py-1 text-xs font-bold tracking-wide text-[#7a5a14]">
+            {field.noteBadge}
+          </span>
+        ) : null}
+        {field.noteTitle ? (
+          <h3
+            className={`font-semibold text-[#0A1628] [font-family:'DM_Serif_Display',serif] ${
+              isSub ? 'text-sm' : isPlain ? 'text-xs font-bold uppercase tracking-widest text-[#0A1628]/45' : 'text-lg'
+            }`}
+          >
+            {field.noteTitle}
+          </h3>
+        ) : null}
+        {field.noteBody ? (
+          <p className={`text-xs leading-relaxed ${isPlain ? 'text-[#0A1628]/40' : 'text-[#0A1628]/45'}`}>
+            {field.noteBody}
+          </p>
+        ) : null}
+        {field.noteCallout ? (
+          <div className="rounded-xl border border-blue-200/50 bg-blue-50/70 p-3.5">
+            <p className="text-xs leading-relaxed text-blue-800/70">{field.noteCallout}</p>
+          </div>
+        ) : null}
+        {field.reviewBullets ? (
+          <div className="rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-4">
+            <ul className="list-inside list-disc space-y-2 text-sm text-[#0A1628]/70">
+              {field.reviewBullets.map((item) => (
+                <li key={item} className="leading-relaxed">
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  if (type === 'repeatable') {
+    return (
+      <RepeatableBlock field={field} value={value} onChange={onChange} errors={error && typeof error === 'object' ? error : {}} />
+    )
+  }
+
+  if (type === 'repeatable') {
+    return null
+  }
+
+  if (type === 'radioGroup') {
+    const opts = field.options ?? []
+    return (
+      <div>
+        <span className={labelClasses}>
+          {label} {required ? <span className="text-red-500">*</span> : null}
+        </span>
+        <div className="mt-3 space-y-3">
+          {opts.map((opt) => {
+            const selected = value === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onChange(name, opt.value)}
+                className={`w-full rounded-xl border-2 p-4 text-left transition ${
+                  selected
+                    ? 'border-[#D4A843] bg-[#D4A843]/5 shadow-sm shadow-[#D4A843]/10'
+                    : 'border-[#0A1628]/10 hover:border-[#D4A843]/35'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 ${
+                      selected ? 'border-[#D4A843]' : 'border-[#0A1628]/20'
+                    }`}
+                  >
+                    {selected ? <div className="h-2.5 w-2.5 rounded-full bg-[#D4A843]" /> : null}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[#0A1628]">{opt.label}</p>
+                    {opt.description ? (
+                      <p className="mt-1 text-xs leading-relaxed text-[#0A1628]/50">{opt.description}</p>
+                    ) : null}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+        {error && typeof error === 'string' ? (
+          <small className="mt-2 block text-xs font-medium text-red-600">{error}</small>
+        ) : null}
+      </div>
+    )
+  }
+
+  if (type === 'yesNo') {
+    return (
+      <div>
+        <span className={`${labelClasses} leading-snug`}>
+          {label} {required ? <span className="text-red-500">*</span> : null}
+        </span>
+        <div className="mt-2 flex flex-wrap gap-3">
+          {['Yes', 'No'].map((choice) => {
+            const selected = value === choice
+            return (
+              <label
+                key={choice}
+                className={`flex cursor-pointer items-center gap-2 rounded-lg border-2 px-4 py-2 text-sm font-medium transition ${
+                  selected
+                    ? 'border-[#D4A843] bg-[#D4A843]/5 text-[#0A1628]'
+                    : 'border-[#0A1628]/10 text-[#0A1628]/60 hover:border-[#D4A843]/35'
+                }`}
+              >
+                <span
+                  className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                    selected ? 'border-[#D4A843]' : 'border-[#0A1628]/20'
+                  }`}
+                >
+                  {selected ? <span className="h-2 w-2 rounded-full bg-[#D4A843]" /> : null}
+                </span>
+                <input
+                  type="radio"
+                  className="sr-only"
+                  name={name}
+                  value={choice}
+                  checked={selected}
+                  onChange={() => onChange(name, choice)}
+                />
+                {choice}
+              </label>
+            )
+          })}
+        </div>
+        {error ? (
+          <small className="mt-2 block text-xs font-medium text-red-600">{error}</small>
+        ) : null}
+      </div>
+    )
+  }
+
+  if (type === 'checkbox') {
+    return (
+      <label className="flex items-start gap-3 rounded-xl border border-[#0A1628]/10 bg-white p-3.5 shadow-sm transition hover:border-[#D4A843]/45">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 accent-[#D4A843]"
+          checked={Boolean(value)}
+          onChange={(event) => onChange(name, event.target.checked)}
+        />
+        <span className="text-sm leading-relaxed text-[#0A1628]/80">
+          {label} {required ? <span className="text-red-500">*</span> : null}
+        </span>
+      </label>
+    )
+  }
+
+  if (type === 'select') {
+    const normalized = normalizeSelectOptions(options)
+    return (
+      <label>
+        <span className={labelClasses}>
+          {label} {required ? <span className="text-red-500">*</span> : null}
+        </span>
+        <select
+          className={`${inputClasses} ${error ? 'border-red-400 focus:border-red-500 focus:shadow-[0_0_0_4px_rgba(239,68,68,0.16)]' : ''}`}
+          value={value ?? ''}
+          required={required}
+          onChange={(event) => onChange(name, event.target.value)}
+        >
+          <option value="">{placeholder ?? 'Select an option'}</option>
+          {normalized.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {helper ? (
+          <small className="mt-1 block text-xs text-[#0A1628]/50">{helper}</small>
+        ) : null}
+        {error ? (
+          <small className="mt-1 block text-xs font-medium text-red-600">{error}</small>
+        ) : null}
+      </label>
+    )
+  }
+
+  if (type === 'file') {
+    const accept = field.accept ?? '.pdf,.jpg,.jpeg,.png'
+    const maxFileSizeMB = field.maxFileSizeMB ?? 5
+    const formatsText = formatAcceptLabels(accept)
+    return (
+      <label>
+        <span className={labelClasses}>
+          {label} {required ? <span className="text-red-500">*</span> : null}
+        </span>
+        <small className="mb-2 block text-xs text-[#0A1628]/50">
+          Accepted formats: {formatsText}. Maximum file size: {maxFileSizeMB} MB.
+        </small>
+        <input
+          className={`${inputClasses} ${error ? 'border-red-400 focus:border-red-500 focus:shadow-[0_0_0_4px_rgba(239,68,68,0.16)]' : ''}`}
+          type="file"
+          required={required && !value}
+          accept={accept}
+          onChange={(event) => onChange(name, event.target.files?.[0]?.name ?? '')}
+        />
+        {value ? (
+          <small className="mt-1 block text-xs text-[#0A1628]/50">Selected: {value}</small>
+        ) : null}
+        {helper ? (
+          <small className="mt-1 block text-xs text-[#0A1628]/50">{helper}</small>
+        ) : null}
+        {error ? (
+          <small className="mt-1 block text-xs font-medium text-red-600">{error}</small>
+        ) : null}
+      </label>
+    )
+  }
+
+  if (type === 'country') {
+    return (
+      <CountryCombobox
+        field={field}
+        value={value}
+        onChange={onChange}
+        labelClasses={labelClasses}
+        inputClasses={inputClasses}
+        error={error}
+      />
+    )
+  }
+
+  if (type === 'textarea') {
+    return (
+      <label>
+        <span className={labelClasses}>
+          {label} {required ? <span className="text-red-500">*</span> : null}
+        </span>
+        <textarea
+          className={`${inputClasses} min-h-24 resize-y ${error ? 'border-red-400 focus:border-red-500 focus:shadow-[0_0_0_4px_rgba(239,68,68,0.16)]' : ''}`}
+          value={value ?? ''}
+          required={required}
+          placeholder={placeholder}
+          onChange={(event) => onChange(name, event.target.value)}
+        />
+        {helper ? (
+          <small className="mt-1 block text-xs text-[#0A1628]/50">{helper}</small>
+        ) : null}
+        {error ? (
+          <small className="mt-1 block text-xs font-medium text-red-600">{error}</small>
+        ) : null}
+      </label>
+    )
+  }
+
+  return (
+    <label>
+      <span className={labelClasses}>
+        {label} {required ? <span className="text-red-500">*</span> : null}
+      </span>
+      <input
+        className={`${inputClasses} ${error ? 'border-red-400 focus:border-red-500 focus:shadow-[0_0_0_4px_rgba(239,68,68,0.16)]' : ''}`}
+        type={type}
+        value={value ?? ''}
+        required={required}
+        placeholder={placeholder}
+        onChange={(event) => onChange(name, event.target.value)}
+      />
+      {helper ? (
+        <small className="mt-1 block text-xs text-[#0A1628]/50">{helper}</small>
+      ) : null}
+      {error ? (
+        <small className="mt-1 block text-xs font-medium text-red-600">{error}</small>
+      ) : null}
+    </label>
+  )
+}
+
+export default FormField

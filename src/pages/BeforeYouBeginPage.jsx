@@ -1,0 +1,126 @@
+import { Link, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import PrimaryButton from '../components/common/PrimaryButton.jsx'
+import ProfileDropdown from '../components/common/ProfileDropdown.jsx'
+import DocumentListSection from '../components/landing/DocumentListSection.jsx'
+import { optionalDocuments, requiredDocuments } from '../data/documentChecklist.js'
+
+const crestLogo =
+  'https://d2xsxph8kpxj0f.cloudfront.net/310519663394975842/o5YxQXzG37vUfAnZtRoyQg/mucm-crest-logo_aac17a92.png'
+
+function BeforeYouBeginPage() {
+  const navigate = useNavigate()
+  const [checked, setChecked] = useState({})
+  const userEmail = (() => {
+    try {
+      return JSON.parse(window.localStorage.getItem('mucm-auth-session') ?? '{}').email ?? ''
+    } catch {
+      return ''
+    }
+  })()
+
+  function toggleChecked(id) {
+    setChecked((previous) => ({ ...previous, [id]: !previous[id] }))
+  }
+
+  function handleLogout() {
+    window.localStorage.removeItem('mucm-auth-session')
+    navigate('/login')
+  }
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-[#f5f3ef] via-[#f8f7f4] to-[#f6f4ef] px-3 py-6 [font-family:'Plus_Jakarta_Sans',sans-serif] sm:px-5 lg:px-8">
+      <section className="mx-auto w-full max-w-5xl overflow-hidden rounded-3xl border border-[#0A1628]/10 bg-white shadow-2xl shadow-[#0A1628]/10">
+        <header className="relative overflow-visible bg-[#0A1628] px-4 py-5 sm:px-7 sm:py-8">
+          <div className="absolute -right-8 -top-10 h-40 w-40 rounded-full bg-[#D4A843]/10" />
+          <div className="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-[#D4A843]/10" />
+
+          <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+              <img
+                src={crestLogo}
+                alt="MUCM Crest"
+                className="h-12 w-12 rounded-xl bg-white/10 p-1.5 shadow-lg sm:h-14 sm:w-14"
+              />
+              <div className="space-y-0.5">
+                <h1 className="text-2xl text-white [font-family:'DM_Serif_Display',serif] sm:text-3xl">
+                  Before You Begin
+                </h1>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#D4A843] sm:text-xs sm:tracking-[0.18em]">
+                  METROPOLITAN UNIVERSITY COLLEGE OF MEDICINE
+                </p>
+                <small className="text-sm text-white/65 sm:text-base">
+                  Gather these documents to complete your application smoothly
+                </small>
+              </div>
+            </div>
+            <div className="relative z-30 self-start sm:self-auto">
+              <ProfileDropdown email={userEmail} onLogout={handleLogout} darkAvatar={false} />
+            </div>
+          </div>
+        </header>
+
+        <div className="space-y-4 px-4 py-5 sm:px-6 sm:py-6">
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <article className="rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-3.5">
+              <h4 className="text-sm font-bold text-[#0A1628]/85">
+                Allow 30-45 minutes
+              </h4>
+              <p className="mt-1.5 text-sm leading-relaxed text-[#0A1628]/50">
+                The application has 8 sections. You can save your progress and
+                return later.
+              </p>
+            </article>
+            <article className="rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-3.5">
+              <h4 className="text-sm font-bold text-[#0A1628]/85">
+                Have your documents ready
+              </h4>
+              <p className="mt-1.5 text-sm leading-relaxed text-[#0A1628]/50">
+                Scanned copies in PDF, JPEG, or PNG format (max 5MB each).
+              </p>
+            </article>
+            <article className="rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-3.5">
+              <h4 className="text-sm font-bold text-[#0A1628]/85">
+                Financial information
+              </h4>
+              <p className="mt-1.5 text-sm leading-relaxed text-[#0A1628]/50">
+                You&apos;ll need details about how your education will be funded.
+              </p>
+            </article>
+          </section>
+
+          <DocumentListSection
+            title="Required Documents"
+            items={requiredDocuments}
+            checked={checked}
+            onToggle={toggleChecked}
+          />
+          <DocumentListSection
+            title="Optional / If Applicable"
+            items={optionalDocuments}
+          />
+
+          <section className="rounded-2xl border border-amber-200/50 bg-amber-50/70 p-3.5">
+            <p className="text-xs leading-relaxed text-amber-900/75 sm:text-sm">
+              Don&apos;t have all documents ready? No problem - you can save your
+              progress at any step and return later to complete your
+              application.
+            </p>
+          </section>
+
+          <div className="pt-1">
+            <Link to="/application" className="block">
+              <PrimaryButton>Start Application</PrimaryButton>
+            </Link>
+            <small className="mt-2 block text-center text-xs text-[#0A1628]/35">
+              Tip: Check off each required document above to confirm you have it
+              ready.
+            </small>
+          </div>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+export default BeforeYouBeginPage
