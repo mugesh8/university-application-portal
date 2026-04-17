@@ -90,6 +90,14 @@ export const applicationSteps = [
       },
       { name: 'dateOfBirth', label: 'Date of Birth', type: 'date', required: true, helper: 'DD/MM/YYYY', section: 'Identity' },
       {
+        name: 'ethnicity',
+        label: 'Ethnicity / Race',
+        type: 'select',
+        options: ethnicityOptions,
+        placeholder: 'Select ethnicity',
+        section: 'Identity',
+      },
+      {
         name: 'citizenship',
         label: 'Citizenship',
         type: 'country',
@@ -104,14 +112,6 @@ export const applicationSteps = [
         required: true,
         helper: 'Where you currently live',
         section: 'Citizenship & Immigration',
-      },
-      {
-        name: 'ethnicity',
-        label: 'Ethnicity / Race',
-        type: 'select',
-        options: ethnicityOptions,
-        placeholder: 'Select ethnicity',
-        section: 'Identity',
       },
       { name: 'passportNumber', label: 'Passport Number', type: 'text', helper: 'As shown on your valid passport', section: 'Citizenship & Immigration' },
       {
@@ -1108,6 +1108,7 @@ export const applicationSteps = [
         type: 'checkbox',
         required: true,
         fullWidth: true,
+        declarationStyle: true,
       },
     ],
   },

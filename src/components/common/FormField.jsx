@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FileStack } from 'lucide-react'
+import { CheckCircle2, FileStack } from 'lucide-react'
 import { countries } from '../../data/countries.js'
 import { formatAcceptLabels } from '../../utils/fileFieldMeta.js'
 import { normalizeSelectOptions } from '../../utils/formVisibility.js'
@@ -283,7 +283,7 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
     const isPlain = field.noteVariant === 'plain'
     const isSub = field.noteVariant === 'sub'
     return (
-      <div className="sm:col-span-2 space-y-2.5">
+      <div className={`sm:col-span-2 ${field.reviewBullets ? 'space-y-2' : 'space-y-2.5'}`}>
         {field.noteBadge ? (
           <span className="inline-block rounded-lg bg-[#D4A843]/12 px-2.5 py-1 text-xs font-bold tracking-wide text-[#7a5a14]">
             {field.noteBadge}
@@ -292,7 +292,13 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
         {field.noteTitle ? (
           <h3
             className={`font-semibold text-[#0A1628] [font-family:'DM_Serif_Display',serif] ${
-              isSub ? 'text-sm' : isPlain ? 'text-xs font-bold uppercase tracking-widest text-[#0A1628]/45' : 'text-lg'
+              isSub
+                ? 'text-sm'
+                : isPlain
+                  ? 'text-xs font-bold uppercase tracking-widest text-[#0A1628]/45'
+                  : field.reviewBullets
+                    ? 'text-base leading-snug'
+                    : 'text-lg'
             }`}
           >
             {field.noteTitle}
@@ -309,11 +315,16 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
           </div>
         ) : null}
         {field.reviewBullets ? (
-          <div className="rounded-md border border-border bg-muted p-3">
-            <ul className="list-inside list-disc space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+          <div className="rounded-xl border border-[#D4A843]/25 bg-white/60 p-3 sm:p-4">
+            <ul className="space-y-2.5">
               {field.reviewBullets.map((item) => (
-                <li key={item}>
-                  {item}
+                <li key={item} className="flex gap-2.5 text-sm leading-snug text-[#0A1628]/90">
+                  <CheckCircle2
+                    className="mt-0.5 h-4 w-4 shrink-0 text-[#c9a227]"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                  <span className="[text-wrap:pretty]">{item}</span>
                 </li>
               ))}
             </ul>
@@ -432,15 +443,24 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
   }
 
   if (type === 'checkbox') {
+    const declaration = field.declarationStyle === true
     return (
-      <label className="flex items-start gap-3 rounded-md border border-border bg-card p-3.5 shadow-sm transition hover:border-accent/50">
+      <label
+        className={`flex cursor-pointer items-start gap-3 transition ${
+          declaration
+            ? 'rounded-xl border-2 border-[#D4A843]/35 bg-white/90 p-3.5 shadow-inner shadow-[#D4A843]/10 hover:border-[#D4A843]/55 sm:p-4'
+            : 'rounded-md border border-border bg-card p-3.5 shadow-sm hover:border-accent/50'
+        }`}
+      >
         <input
           type="checkbox"
-          className="mt-0.5 h-4 w-4 accent-[#D4A843]"
+          className={`mt-1 h-[18px] w-[18px] accent-[#D4A843] ${declaration ? 'shrink-0' : ''}`}
           checked={Boolean(value)}
           onChange={(event) => onChange(name, event.target.checked)}
         />
-        <span className="text-sm leading-relaxed text-foreground/90">
+        <span
+          className={`leading-relaxed text-foreground/90 ${declaration ? 'text-sm sm:text-[15px]' : 'text-sm'}`}
+        >
           {label} {required ? <span className="text-red-500">*</span> : null}
         </span>
       </label>

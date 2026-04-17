@@ -218,7 +218,7 @@ export default function FileDropzone({
   const showEmpty = !hasFile && !showProgress
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <input
         ref={inputRef}
         id={id}
@@ -242,10 +242,10 @@ export default function FileDropzone({
       />
 
       {hasFile && !showProgress ? (
-        <div className="relative overflow-hidden rounded-xl border border-[#D4A843]/70 bg-card px-3.5 py-3.5 shadow-[0_8px_24px_rgba(16,185,129,0.12)] transition sm:px-4 sm:py-4">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#16A34A]/12 text-[#16A34A]">
-              <CheckCircle2 className="h-5 w-5" strokeWidth={1.8} />
+        <div className="relative overflow-hidden rounded-xl border border-[#D4A843]/70 bg-card px-3 py-2.5 shadow-[0_8px_24px_rgba(16,185,129,0.12)] transition sm:px-3.5 sm:py-3">
+          <div className="flex items-start gap-2.5">
+            <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#16A34A]/12 text-[#16A34A]">
+              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
               {fieldLabel ? (
@@ -272,16 +272,16 @@ export default function FileDropzone({
 
       {showProgress ? (
         <div
-          className="overflow-hidden rounded-xl border border-[#D4A843]/35 bg-card px-3.5 py-4 shadow-sm sm:px-4"
+          className="overflow-hidden rounded-xl border border-[#D4A843]/35 bg-card px-3 py-3 shadow-sm sm:px-3.5"
           role="progressbar"
           aria-valuenow={uploadProgress}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={`Upload progress: ${uploadProgress}%`}
         >
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4A843]/12 text-[#b98a22]">
-              <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.8} aria-hidden />
+          <div className="flex items-start gap-2.5">
+            <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#D4A843]/12 text-[#b98a22]">
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.8} aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
               {fieldLabel ? (
@@ -296,7 +296,7 @@ export default function FileDropzone({
               <p className="mt-0.5 truncate text-xs text-muted-foreground" title={pendingFileName}>
                 {pendingFileName}
               </p>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-[#D4A843] to-[#16A34A] transition-[width] duration-150 ease-out"
                   style={{ width: `${uploadProgress}%` }}
@@ -329,7 +329,7 @@ export default function FileDropzone({
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`group relative w-full rounded-xl border-2 border-dashed border-border bg-muted/40 px-3 py-4 text-center transition sm:px-4 sm:py-5 ${
+          className={`group relative w-full rounded-xl border-2 border-dashed border-border bg-muted/40 px-3 py-2.5 text-left transition sm:px-4 sm:py-3 ${
             isDragging
               ? 'border-[#D4A843] bg-accent/20 shadow-[inset_0_0_0_1px_rgba(212,168,67,0.35)]'
               : error
@@ -342,41 +342,50 @@ export default function FileDropzone({
               : 'Upload file — drag and drop or click to browse'
           }
         >
-          <div className="pointer-events-none flex w-full flex-col items-center gap-2.5 px-0.5 text-center sm:gap-3">
+          <div className="pointer-events-none flex w-full flex-col gap-1.5 sm:gap-2">
             {fieldLabel ? (
-              <p className="w-full text-sm font-semibold leading-snug text-foreground">
+              <p className="w-full text-center text-sm font-semibold leading-tight text-foreground sm:text-left">
                 {fieldLabel} {required ? <span className="text-red-500">*</span> : null}
               </p>
             ) : null}
             {formatsLine ? (
-              <p className="w-full max-w-xl text-[11px] leading-snug text-muted-foreground">{formatsLine}</p>
+              <p className="w-full text-center text-[10px] leading-snug text-muted-foreground sm:text-left">
+                {formatsLine}
+              </p>
             ) : (
-              <p className="w-full max-w-xl text-[11px] leading-snug text-muted-foreground">
+              <p className="w-full text-center text-[10px] leading-snug text-muted-foreground sm:text-left">
                 PDF, images, or other accepted types · max {maxFileSizeMB} MB
               </p>
             )}
-            <span
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition ${
-                isDragging
-                  ? 'border-[#D4A843]/40 bg-[#D4A843]/15 text-[#b98a22]'
-                  : 'border-border bg-card text-muted-foreground group-hover:border-[#D4A843]/40 group-hover:text-[#D4A843]'
-              }`}
-            >
-              <Upload className="h-5 w-5" strokeWidth={1.6} />
-            </span>
-            <p className="text-sm font-semibold text-foreground/90">
-              {isDragging ? 'Drop file to upload' : 'Drag & drop or click to browse'}
-            </p>
-            {helperText ? (
-              <p id={`${id}-helper`} className="w-full max-w-xl text-[11px] leading-relaxed text-muted-foreground">
-                {helperText}
-              </p>
-            ) : null}
+            <div className="flex items-center gap-3 pt-0.5">
+              <span
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border shadow-sm transition ${
+                  isDragging
+                    ? 'border-[#D4A843]/40 bg-[#D4A843]/15 text-[#b98a22]'
+                    : 'border-border bg-card text-muted-foreground group-hover:border-[#D4A843]/40 group-hover:text-[#D4A843]'
+                }`}
+              >
+                <Upload className="h-4 w-4" strokeWidth={1.6} />
+              </span>
+              <div className="min-w-0 flex-1 text-left">
+                <p className="text-sm font-semibold leading-snug text-foreground/90">
+                  {isDragging ? 'Drop file to upload' : 'Drag & drop or click to browse'}
+                </p>
+                {helperText ? (
+                  <p
+                    id={`${id}-helper`}
+                    className="mt-0.5 text-[11px] leading-snug text-muted-foreground"
+                  >
+                    {helperText}
+                  </p>
+                ) : null}
+              </div>
+            </div>
             {error ? (
-              <p className="w-full max-w-xl text-xs font-medium leading-snug text-red-600">{error}</p>
+              <p className="w-full text-center text-xs font-medium leading-snug text-red-600 sm:text-left">{error}</p>
             ) : null}
             {dropHint ? (
-              <p id={`${id}-hint`} className="w-full max-w-xl text-xs font-medium text-amber-700" role="status">
+              <p id={`${id}-hint`} className="w-full text-center text-xs font-medium text-amber-700 sm:text-left" role="status">
                 {dropHint}
               </p>
             ) : null}

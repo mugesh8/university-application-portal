@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   BookOpen,
   Briefcase,
-  CheckCircle2,
   FileCheck2,
   FileStack,
   FolderOpen,
@@ -241,6 +240,11 @@ function isValueMissing(field, rawValue) {
 /**
  * Group fields for Step 8 review: use `field.section` when set, else the most recent
  * visible note title in step order, else repeatable `sectionTitle`.
+ *
+ * Fields are merged by the same subheading across the whole step (not only when adjacent),
+ * so one misplaced field — e.g. Identity after Citizenship — does not repeat section headers.
+ * Section order follows first occurrence in the step; field order within a section follows
+ * the step definition.
  */
 function buildReviewSubsectionGroups(reviewStep, values) {
   const rows = []
@@ -267,16 +271,23 @@ function buildReviewSubsectionGroups(reviewStep, values) {
     rows.push({ subheading, field })
   }
 
-  const groups = []
-  for (const row of rows) {
-    const prev = groups[groups.length - 1]
-    if (prev && prev.subheading === row.subheading) {
-      prev.fields.push(row.field)
-    } else {
-      groups.push({ subheading: row.subheading, fields: [row.field] })
+  const sectionKey = (sub) => (sub === null || sub === undefined ? '__none' : String(sub))
+  const order = []
+  const byKey = new Map()
+
+  for (const { subheading, field } of rows) {
+    const key = sectionKey(subheading)
+    if (!byKey.has(key)) {
+      byKey.set(key, [])
+      order.push(key)
     }
+    byKey.get(key).push(field)
   }
-  return groups
+
+  return order.map((key) => ({
+    subheading: key === '__none' ? null : key,
+    fields: byKey.get(key),
+  }))
 }
 
 function StepForm({
@@ -377,21 +388,17 @@ function StepForm({
     isLastStep && (missingRequiredCount > 0 || reviewStepFieldsMissing > 0)
 
   const stepPageVertical = isReviewStep
-    ? 'py-2 sm:py-3 lg:py-3'
+    ? 'py-3 sm:py-4 lg:py-5'
     : 'py-5 sm:py-6 lg:py-8'
 
   return (
     <section className={`page-gutter-x w-full bg-transparent ${stepPageVertical}`}>
       {/* Step hero banner */}
       <div
-        className={`overflow-hidden rounded-xl border border-border bg-card shadow-md ${
-          isReviewStep ? 'mb-2' : 'mb-3'
-        }`}
+        className={`overflow-hidden rounded-xl border border-border bg-card shadow-md ${isReviewStep ? 'mb-2 shadow-[0_8px_30px_-12px_rgba(10,22,40,0.12)]' : 'mb-3'}`}
       >
         <div
-          className={`relative overflow-hidden bg-gradient-to-r from-[#0A1628] via-[#163457] to-[#0A1628] px-4 sm:px-5 ${
-            isReviewStep ? 'py-1.5 sm:py-2' : 'py-2 sm:px-6 sm:py-2.5'
-          }`}
+          className={`relative overflow-hidden bg-gradient-to-r from-[#0A1628] via-[#163457] to-[#0A1628] px-6 sm:px-8 ${isReviewStep ? 'py-1.5 sm:py-2' : 'py-2 sm:py-2.5'}`}
         >
           <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1571260899304-425eee4c7efc?auto=format&fit=crop&w=1400&q=70')] bg-cover bg-center opacity-25" />
           <div className="absolute inset-0 bg-[#08182d]/55" />
@@ -399,41 +406,37 @@ function StepForm({
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#D4A843]">
               Step {stepNumber} of {totalSteps}
             </p>
-            <h2
-              className={`mt-0.5 text-white [font-family:'DM_Serif_Display',serif] ${
-                isReviewStep ? 'text-base sm:text-lg' : 'text-lg sm:text-xl'
-              }`}
-            >
+            <h2 className="mt-0.5 text-lg text-white [font-family:'DM_Serif_Display',serif] sm:text-xl">
               {step.title}
             </h2>
             {step.description ? (
-              <p className={`mt-0.5 text-white/60 ${isReviewStep ? 'text-xs sm:text-[13px]' : 'text-[11px] sm:text-xs'}`}>
-                {step.description}
-              </p>
+              <p className="mt-0.5 text-[11px] text-white/60 sm:text-xs">{step.description}</p>
             ) : null}
           </div>
         </div>
-        <div className={`px-4 py-1.5 sm:px-5 ${isReviewStep ? '' : 'sm:px-6 sm:py-2'}`}>
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="font-medium">Overall Progress</span>
-            <span className="font-bold text-foreground">{progressPercent}%</span>
+        {isReviewStep ? null : (
+          <div className="px-6 py-1.5 sm:px-8 sm:py-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="font-medium">Overall Progress</span>
+              <span className="font-bold text-foreground">{progressPercent}%</span>
+            </div>
+            <div className="mt-1.5 h-1.5 rounded-full bg-muted">
+              <div
+                className="h-1.5 rounded-full bg-gradient-to-r from-[#D4A843] to-[#b98a22] transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
           </div>
-          <div className="mt-1.5 h-1.5 rounded-full bg-muted">
-            <div
-              className="h-1.5 rounded-full bg-gradient-to-r from-[#D4A843] to-[#b98a22] transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Premium Step Tracker */}
-      <header className={`overflow-hidden rounded-xl border border-border bg-card shadow-sm ${isReviewStep ? 'mb-2' : 'mb-3'}`}>
+      <header
+        className={`overflow-hidden rounded-xl border border-border bg-card shadow-sm ${isReviewStep ? 'mb-2 shadow-sm' : 'mb-3'}`}
+      >
         {/* Header label */}
         <div
-          className={`flex items-center justify-between border-b border-border px-4 sm:px-5 ${
-            isReviewStep ? 'py-1' : 'py-1.5 sm:px-6'
-          }`}
+          className={`flex items-center justify-between border-b border-border px-6 sm:px-8 ${isReviewStep ? 'py-1 sm:py-1' : 'py-1.5'}`}
         >
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
             Application Progress
@@ -445,7 +448,7 @@ function StepForm({
 
         {/* Stepper row */}
         <div
-          className={`overflow-x-auto sm:overflow-visible ${isReviewStep ? 'px-4 py-1.5 sm:px-5' : 'px-5 py-2 sm:px-6'}`}
+          className={`overflow-x-auto px-6 sm:overflow-visible sm:px-8 ${isReviewStep ? 'py-1 sm:py-1.5' : 'py-2'}`}
         >
           <div className="flex min-w-max items-start gap-0 sm:min-w-0 sm:justify-center">
             {steps.map((item, index) => {
@@ -459,17 +462,21 @@ function StepForm({
                   <button
                     type="button"
                     onClick={() => onStepClick(index)}
-                    className="group flex flex-col items-center gap-1 focus:outline-none"
+                    className={`group flex flex-col items-center focus:outline-none ${isReviewStep ? 'gap-0.5' : 'gap-1'}`}
                     style={{ minWidth: '64px' }}
                   >
                     {/* Circle */}
                     <div className="relative">
                       {/* Glow ring for active */}
                       {isActive ? (
-                        <span className="absolute -inset-2 animate-soft-pulse rounded-full bg-[#D4A843]/20" />
+                        <span
+                          className={`absolute rounded-full bg-[#D4A843]/20 ${isReviewStep ? '-inset-1.5' : '-inset-2'} animate-soft-pulse`}
+                        />
                       ) : null}
                       <div
-                        className={`relative flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-bold transition-all duration-300 ${
+                        className={`relative flex items-center justify-center rounded-full border-2 text-xs font-bold transition-all duration-300 ${
+                          isReviewStep ? 'h-6 w-6' : 'h-7 w-7'
+                        } ${
                           isActive
                             ? 'border-[#D4A843] bg-[#D4A843] text-white shadow-lg shadow-[#D4A843]/30'
                             : isCompleted
@@ -478,7 +485,11 @@ function StepForm({
                         }`}
                       >
                         {isCompleted ? (
-                          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+                          <svg
+                            className={isReviewStep ? 'h-3 w-3' : 'h-4 w-4'}
+                            viewBox="0 0 16 16"
+                            fill="none"
+                          >
                             <path
                               d="M3 8.5l3.5 3.5 6.5-7"
                               stroke="currentColor"
@@ -495,7 +506,9 @@ function StepForm({
 
                     {/* Label */}
                     <span
-                      className={`max-w-[72px] text-center text-[11px] font-semibold leading-tight transition-colors sm:text-xs ${
+                      className={`max-w-[72px] text-center font-semibold leading-tight transition-colors ${
+                        isReviewStep ? 'text-[10px] sm:text-[11px]' : 'text-[11px] sm:text-xs'
+                      } ${
                         isActive
                           ? 'text-[#D4A843]'
                           : isCompleted
@@ -509,7 +522,9 @@ function StepForm({
 
                   {/* Connector line */}
                   {!isLast ? (
-                    <div className="mx-1 mt-3.5 h-0.5 w-6 flex-shrink-0 rounded-full sm:w-8">
+                    <div
+                      className={`mx-1 h-0.5 w-6 flex-shrink-0 rounded-full sm:w-8 ${isReviewStep ? 'mt-3' : 'mt-3.5'}`}
+                    >
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           index < currentIndex
@@ -527,7 +542,7 @@ function StepForm({
       </header>
 
       {/* Form body */}
-      <div key={step.id} className={`animate-fade-in-up ${isReviewStep ? 'space-y-3' : 'space-y-5'}`}>
+      <div key={step.id} className={`animate-fade-in-up ${isReviewStep ? 'space-y-4' : 'space-y-5'}`}>
         {formError ? (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {formError}
@@ -571,43 +586,43 @@ function StepForm({
         ) : null}
 
         {isReviewStep ? (
-          <div className="space-y-3">
-            <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
-              <h4 className="text-lg font-semibold leading-snug text-foreground [font-family:'DM_Serif_Display',serif] sm:text-xl">
-                Review Your Application
-              </h4>
-              <p className="mt-1 text-sm leading-snug text-muted-foreground">
-                Please verify all information before submitting.
-              </p>
-
-              <div className="mt-3 space-y-2">
-                <div className="flex gap-2 rounded-lg border border-emerald-200/90 bg-emerald-50/95 px-3 py-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2} aria-hidden />
-                  <p className="text-sm leading-snug text-emerald-950">
-                    <span className="font-semibold">Almost there!</span> Review your details below before submitting.
+          <div className="space-y-4">
+            <div className="space-y-2">
+              {requiredDocumentFields.length > 0 ? (
+                <div className="flex gap-2.5 rounded-xl border border-amber-200/90 bg-amber-50/95 px-6 py-2.5 shadow-sm sm:px-8 sm:py-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
+                  <p className="text-sm leading-relaxed text-amber-950">
+                    <span className="font-semibold">Missing required documents.</span> Go back to Step {documentsStepNumber}{' '}
+                    and upload all required files before you can submit.
                   </p>
                 </div>
+              ) : null}
 
-                {requiredDocumentFields.length > 0 ? (
-                  <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
-                    <p className="text-sm leading-snug text-amber-950">
-                      <span className="font-semibold">Missing required documents.</span> Go back to Step {documentsStepNumber}{' '}
-                      and upload all required documents.
+              {missingNonDocumentRequired > 0 ? (
+                <div className="flex gap-2.5 rounded-xl border border-amber-200/90 bg-amber-50/95 px-6 py-2.5 shadow-sm sm:px-8 sm:py-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" strokeWidth={2} aria-hidden />
+                  <p className="text-sm leading-relaxed text-amber-950">
+                    <span className="font-semibold">{missingNonDocumentRequired} required field(s)</span> still need
+                    values. Use <strong>Edit</strong> on the section below to fix them.
+                  </p>
+                </div>
+              ) : null}
+
+              {requiredDocumentFields.length === 0 && missingNonDocumentRequired === 0 ? (
+                <div className="flex items-start gap-3 rounded-xl border border-[#D4A843]/30 bg-gradient-to-br from-[#D4A843]/15 via-card to-card px-6 py-3 shadow-[0_4px_24px_-12px_rgba(212,168,67,0.35)] sm:px-8 sm:py-3.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#D4A843]/25 text-[#8a6918] shadow-inner shadow-[#D4A843]/20">
+                    <FileCheck2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                  </div>
+                  <div className="min-w-0 pt-0.5">
+                    <p className="text-sm font-semibold tracking-tight text-foreground [font-family:'DM_Serif_Display',serif] sm:text-base">
+                      Ready to submit
+                    </p>
+                    <p className="mt-1 text-xs leading-snug text-muted-foreground sm:text-sm">
+                      Review each block below, then confirm the declaration.
                     </p>
                   </div>
-                ) : null}
-
-                {missingNonDocumentRequired > 0 ? (
-                  <div className="flex gap-2 rounded-lg border border-amber-200/90 bg-amber-50/90 px-3 py-2">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" strokeWidth={2} aria-hidden />
-                    <p className="text-sm leading-snug text-amber-950">
-                      {missingNonDocumentRequired} required field(s) need attention. Use <strong>Edit</strong> on each
-                      section.
-                    </p>
-                  </div>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
 
             {priorSteps.map((reviewStep, reviewIndex) => {
@@ -617,36 +632,47 @@ function StepForm({
                 <div
                   key={reviewStep.id}
                   style={{ animationDelay: `${reviewIndex * 40}ms` }}
-                  className="animate-fade-in-up overflow-hidden rounded-xl border border-border bg-card shadow-[0_2px_16px_-4px_rgba(10,22,40,0.06)]"
+                  className="animate-fade-in-up overflow-hidden rounded-xl border border-[#0A1628]/[0.08] bg-card shadow-[0_4px_24px_-16px_rgba(10,22,40,0.12)] ring-1 ring-[#0A1628]/[0.04]"
                 >
-                  <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2 sm:px-5">
-                    <h4 className="text-lg font-bold text-foreground [font-family:'DM_Serif_Display',serif] sm:text-xl">
-                      {reviewStep.title}
-                    </h4>
+                  <div className="flex items-center justify-between gap-3 border-b border-[#0A1628]/[0.06] bg-gradient-to-r from-[#D4A843]/[0.08] via-[#D4A843]/[0.03] to-transparent px-6 py-3 sm:px-8">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#0A1628] text-[11px] font-bold text-white shadow-sm"
+                        aria-hidden
+                      >
+                        {reviewIndex + 1}
+                      </span>
+                      <h4 className="min-w-0 text-base font-bold leading-tight text-foreground [font-family:'DM_Serif_Display',serif] sm:text-lg">
+                        {reviewStep.title}
+                      </h4>
+                    </div>
                     <button
                       type="button"
                       onClick={() => onStepClick(reviewIndex)}
-                      className="shrink-0 text-sm font-semibold text-[#D4A843] underline-offset-2 transition hover:text-[#b98a22] hover:underline"
+                      className="shrink-0 rounded-full border border-[#D4A843]/40 bg-white px-3 py-1.5 text-xs font-semibold text-[#5c4510] shadow-sm transition hover:border-[#D4A843]/70 hover:bg-[#D4A843]/10 sm:px-4 sm:py-2 sm:text-sm"
                     >
                       Edit
                     </button>
                   </div>
 
                   {subsectionGroups.length === 0 ? (
-                    <div className="px-4 py-5 text-center text-sm text-[#0A1628]/45 sm:px-5">
+                    <div className="px-6 py-5 text-center text-sm text-muted-foreground sm:px-8">
                       No visible values to review for this step.
                     </div>
                   ) : (
-                    <div className="space-y-6 px-4 py-4 sm:px-5 sm:py-5">
+                    <div className="space-y-4 bg-gradient-to-b from-muted/25 to-transparent px-6 py-4 sm:px-8 sm:py-5">
                       {subsectionGroups.map((group, groupIdx) => (
                         <div key={`${reviewStep.id}-sub-${groupIdx}`}>
                           {group.subheading ? (
-                            <h5 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#0A1628]/55 sm:text-[13px]">
-                              {group.subheading}
-                            </h5>
+                            <div className="mb-2 flex items-center gap-2">
+                              <span className="h-4 w-1 shrink-0 rounded-full bg-gradient-to-b from-[#D4A843] to-[#b98a22]" />
+                              <h5 className="text-sm font-semibold leading-snug text-foreground">
+                                {group.subheading}
+                              </h5>
+                            </div>
                           ) : null}
-                          <div className="divide-y divide-[#0A1628]/8">
-                            {group.fields.map((field) => {
+                          <div className="overflow-hidden rounded-xl border border-[#0A1628]/[0.07] bg-background/80 shadow-inner shadow-[#0A1628]/[0.03]">
+                            {group.fields.map((field, fi) => {
                               const repeatableLabel =
                                 field.type === 'repeatable'
                                   ? field.sectionTitle ?? field.label ?? field.name
@@ -657,11 +683,14 @@ function StepForm({
                                   String(repeatableLabel).trim() !== String(group.subheading).trim())
 
                               return (
-                              <div key={`${reviewStep.id}-${field.name}`} className="py-2.5 first:pt-0 sm:py-3">
+                              <div
+                                key={`${reviewStep.id}-${field.name}`}
+                                className={`${fi > 0 ? 'border-t border-[#0A1628]/[0.06]' : ''}`}
+                              >
                                 {field.type === 'repeatable' ? (
-                                  <div className="space-y-2">
+                                  <div className="space-y-2 px-5 py-3 sm:px-7">
                                     {showRepeatableInlineTitle ? (
-                                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#0A1628]/50">
+                                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                                         {repeatableLabel}
                                       </p>
                                     ) : null}
@@ -669,23 +698,23 @@ function StepForm({
                                       values[field.name].map((row, rowIndex) => (
                                         <div
                                           key={`${field.name}-row-${rowIndex}`}
-                                          className="rounded-lg border border-border bg-muted/50 px-3 py-2"
+                                          className="rounded-lg border border-border bg-muted/40 px-3 py-2.5"
                                         >
-                                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#D4A843]">
+                                          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#b98a22]">
                                             {field.itemBadge ?? 'Item'} {rowIndex + 1}
                                           </p>
                                           <div className="mt-2 space-y-0">
                                             {(field.itemFields ?? []).map((sub, subIdx) => (
                                               <div
                                                 key={`${field.name}-${rowIndex}-${sub.name}`}
-                                                className={`grid grid-cols-1 gap-0.5 py-1.5 sm:grid-cols-[minmax(0,200px)_1fr] sm:gap-4 ${
-                                                  subIdx > 0 ? 'border-t border-border' : ''
+                                                className={`grid grid-cols-1 gap-0.5 py-1.5 sm:grid-cols-[minmax(0,200px)_1fr] sm:gap-3 ${
+                                                  subIdx > 0 ? 'border-t border-[#0A1628]/[0.06]' : ''
                                                 }`}
                                               >
-                                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0A1628]/50">
+                                                <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
                                                   {String(sub.label ?? sub.name)}
                                                 </p>
-                                                <p className="text-sm leading-relaxed text-[#0A1628]">
+                                                <p className="text-sm leading-relaxed text-foreground">
                                                   {getSingleFieldDisplayValue(sub, row?.[sub.name])}
                                                 </p>
                                               </div>
@@ -694,15 +723,15 @@ function StepForm({
                                         </div>
                                       ))
                                     ) : (
-                                      <p className="text-sm text-[#0A1628]/55">No entries added.</p>
+                                      <p className="text-sm text-muted-foreground">No entries added.</p>
                                     )}
                                   </div>
                                 ) : (
-                                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)] sm:items-start sm:gap-5">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0A1628]/50">
+                                  <div className="grid grid-cols-1 gap-1 px-5 py-2.5 sm:grid-cols-[minmax(0,210px)_minmax(0,1fr)] sm:items-start sm:gap-5 sm:px-7 sm:py-3">
+                                    <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                                       {field.label}
                                     </p>
-                                    <p className="text-sm leading-relaxed text-[#0A1628]">
+                                    <p className="text-sm font-medium leading-snug text-foreground">
                                       {getSingleFieldDisplayValue(field, values[field.name])}
                                     </p>
                                   </div>
@@ -725,16 +754,16 @@ function StepForm({
               return (
                 <div
                   key={group.title ?? `review-group-${groupIndex}`}
-                  className="overflow-hidden rounded-xl border border-border bg-card shadow-[0_2px_16px_-4px_rgba(10,22,40,0.06)]"
+                  className="overflow-hidden rounded-xl border border-[#D4A843]/35 bg-gradient-to-b from-[#fffdf8] via-card to-card shadow-[0_8px_32px_-20px_rgba(212,168,67,0.45)] ring-1 ring-[#D4A843]/15"
                 >
                   {group.title ? (
-                    <div className="border-b border-border bg-card px-4 py-2.5 sm:px-5">
+                    <div className="border-b border-[#D4A843]/20 bg-gradient-to-r from-[#D4A843]/10 to-transparent px-6 py-3 sm:px-8">
                       <SectionHeader title={group.title} subtitle={group.subtitle} compact />
                     </div>
                   ) : null}
 
                   {noteFieldForForm ? (
-                    <div className={`px-4 sm:px-5 ${hasRegularFields ? 'pt-3 pb-0' : 'py-3'}`}>
+                    <div className={`px-6 sm:px-8 ${hasRegularFields ? 'pt-4 pb-0' : 'py-4'}`}>
                       <FormField
                         field={noteFieldForForm}
                         value={values[group.noteField.name]}
@@ -746,7 +775,7 @@ function StepForm({
                   ) : null}
 
                   {hasRegularFields ? (
-                    <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-3 sm:p-5">
+                    <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-2 xl:grid-cols-3 sm:p-6">
                       {group.fields.map((field) => (
                         <div
                           key={field.name}
@@ -802,8 +831,10 @@ function StepForm({
 
         {/* Footer nav */}
         <footer
-          className={`space-y-2 rounded-xl border border-border bg-card shadow-sm ${
-            isReviewStep ? 'mt-1.5 p-3 sm:p-3.5' : 'mt-2 space-y-3 p-3.5 sm:p-4'
+          className={`space-y-2 shadow-sm ${
+            isReviewStep
+              ? 'mt-4 space-y-2.5 rounded-xl border border-[#0A1628]/10 bg-gradient-to-b from-card to-muted/20 px-6 py-3 sm:px-8 sm:py-4'
+              : 'mt-2 space-y-3 rounded-xl border border-border bg-card p-3.5 sm:p-4'
           }`}
         >
           {draftNotice ? (
