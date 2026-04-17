@@ -1,0 +1,394 @@
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { CheckCircle2, Loader2, Upload, X } from 'lucide-react'
+
+function parseAcceptExtensions(accept) {
+  if (!accept || typeof accept !== 'string') return ['.pdf', '.jpg', '.jpeg', '.png']
+  return accept
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function fileMatchesAccept(file, accept) {
+  const exts = parseAcceptExtensions(accept)
+  const lower = file.name.toLowerCase()
+  return exts.some((ext) => {
+    const e = ext.startsWith('.') ? ext : `.${ext}`
+    return lower.endsWith(e)
+  })
+}
+
+/**
+ * Smooth simulated upload progress (no server). Duration scales lightly with file size.
+ */
+function runUploadProgress(onProgress, signal) {
+  return (file) =>
+    new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'))
+        return
+      }
+      const sizeMb = file.size / (1024 * 1024)
+      const durationMs = Math.min(3200, Math.max(450, 380 + sizeMb * 420))
+      const start = performance.now()
+      let raf = 0
+
+      function tick(now) {
+        if (signal.aborted) {
+          cancelAnimationFrame(raf)
+          reject(new DOMException('Aborted', 'AbortError'))
+          return
+        }
+        const t = Math.min(1, (now - start) / durationMs)
+        const eased = 1 - (1 - t) ** 2
+        onProgress(Math.min(100, Math.round(eased * 100)))
+        if (t < 1) {
+          raf = requestAnimationFrame(tick)
+        } else {
+          onProgress(100)
+          resolve()
+        }
+      }
+
+      raf = requestAnimationFrame(tick)
+    })
+}
+
+export default function FileDropzone({
+  accept = '.pdf,.jpg,.jpeg,.png',
+  maxFileSizeMB = 5,
+  value,
+  onChange,
+  required,
+  error,
+  /** Shown inside the dashed area (field title). */
+  fieldLabel,
+  /** e.g. "Accepted formats: PDF, JPEG. Maximum file size: 5 MB." */
+  formatsLine,
+  /** Longer guidance (field helper), inside the dashed area. */
+  helperText,
+  /** +1 when a simulated upload starts, −1 when it ends (success, cancel, or error). */
+  onUploadActivityChange,
+}) {
+  const inputRef = useRef(null)
+  const abortRef = useRef(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dropHint, setDropHint] = useState('')
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
+  const [pendingFileName, setPendingFileName] = useState('')
+  const id = useId()
+  const hasFile = Boolean(value && String(value).trim())
+
+  const resetInput = useCallback(() => {
+    if (inputRef.current) {
+      inputRef.current.value = ''
+    }
+  }, [])
+
+  const abortUpload = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort()
+      abortRef.current = null
+    }
+    setIsUploading(false)
+    setUploadProgress(0)
+    setPendingFileName('')
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) {
+        abortRef.current.abort()
+        abortRef.current = null
+      }
+    }
+  }, [])
+
+  const syncInputFile = useCallback((file) => {
+    if (!inputRef.current) return
+    try {
+      const dt = new DataTransfer()
+      dt.items.add(file)
+      inputRef.current.files = dt.files
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const finalizeFile = useCallback(
+    (file) => {
+      onChange(file.name)
+      syncInputFile(file)
+    },
+    [onChange, syncInputFile],
+  )
+
+  const startUpload = useCallback(
+    (file) => {
+      if (abortRef.current) abortRef.current.abort()
+      const controller = new AbortController()
+      abortRef.current = controller
+      setDropHint('')
+      setPendingFileName(file.name)
+      setUploadProgress(0)
+      setIsUploading(true)
+      onUploadActivityChange?.(1)
+
+      const run = runUploadProgress(setUploadProgress, controller.signal)
+      run(file)
+        .then(() => {
+          if (controller.signal.aborted) return
+          finalizeFile(file)
+        })
+        .finally(() => {
+          onUploadActivityChange?.(-1)
+          setIsUploading(false)
+          setUploadProgress(0)
+          setPendingFileName('')
+          abortRef.current = null
+        })
+    },
+    [finalizeFile, onUploadActivityChange],
+  )
+
+  const applyFile = useCallback(
+    (file) => {
+      if (!file) return false
+      if (!fileMatchesAccept(file, accept)) {
+        setDropHint('Use one of the accepted file types for this field.')
+        return false
+      }
+      const maxBytes = maxFileSizeMB * 1024 * 1024
+      if (file.size > maxBytes) {
+        setDropHint(`File is too large. Maximum size is ${maxFileSizeMB} MB.`)
+        return false
+      }
+      startUpload(file)
+      return true
+    },
+    [accept, maxFileSizeMB, startUpload],
+  )
+
+  const handleInputChange = (event) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      if (!applyFile(file) && inputRef.current) {
+        inputRef.current.value = ''
+      }
+    } else {
+      onChange('')
+    }
+  }
+
+  const clearFile = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    abortUpload()
+    setDropHint('')
+    onChange('')
+    resetInput()
+  }
+
+  const onDragOver = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const onDragLeave = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const onDrop = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDragging(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file) applyFile(file)
+  }
+
+  const openPicker = () => {
+    if (!isUploading) inputRef.current?.click()
+  }
+
+  const showProgress = isUploading
+  const showEmpty = !hasFile && !showProgress
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={inputRef}
+        id={id}
+        type="file"
+        className="sr-only"
+        tabIndex={-1}
+        required={required && !hasFile && !isUploading}
+        accept={accept}
+        disabled={isUploading}
+        onChange={handleInputChange}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={
+          [dropHint ? `${id}-hint` : null, helperText ? `${id}-helper` : null].filter(Boolean).join(' ') ||
+          undefined
+        }
+        aria-label={
+          fieldLabel
+            ? `${fieldLabel}${required ? ' (required)' : ''} — file upload`
+            : `Upload file — max ${maxFileSizeMB} MB`
+        }
+      />
+
+      {hasFile && !showProgress ? (
+        <div className="relative overflow-hidden rounded-xl border border-[#D4A843]/70 bg-card px-3.5 py-3.5 shadow-[0_8px_24px_rgba(16,185,129,0.12)] transition sm:px-4 sm:py-4">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#16A34A]/12 text-[#16A34A]">
+              <CheckCircle2 className="h-5 w-5" strokeWidth={1.8} />
+            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              {fieldLabel ? (
+                <p className="text-sm font-semibold leading-snug text-foreground">
+                  {fieldLabel} {required ? <span className="text-red-500">*</span> : null}
+                </p>
+              ) : null}
+              <p className={`text-sm font-semibold text-[#16A34A] ${fieldLabel ? 'mt-1.5' : ''}`}>File added</p>
+              <p className="mt-0.5 truncate text-sm text-[#16A34A]/90" title={value}>
+                {value}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearFile}
+              className="flex h-9 flex-shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2.5 text-xs font-semibold text-muted-foreground shadow-sm transition hover:border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {showProgress ? (
+        <div
+          className="overflow-hidden rounded-xl border border-[#D4A843]/35 bg-card px-3.5 py-4 shadow-sm sm:px-4"
+          role="progressbar"
+          aria-valuenow={uploadProgress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Upload progress: ${uploadProgress}%`}
+        >
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#D4A843]/12 text-[#b98a22]">
+              <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.8} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              {fieldLabel ? (
+                <p className="text-sm font-semibold leading-snug text-foreground">
+                  {fieldLabel} {required ? <span className="text-red-500">*</span> : null}
+                </p>
+              ) : null}
+              <div className={`flex items-center justify-between gap-2 ${fieldLabel ? 'mt-1.5' : ''}`}>
+                <p className="text-sm font-semibold text-foreground">Uploading…</p>
+                <span className="text-xs font-bold tabular-nums text-[#D4A843]">{uploadProgress}%</span>
+              </div>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground" title={pendingFileName}>
+                {pendingFileName}
+              </p>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#D4A843] to-[#16A34A] transition-[width] duration-150 ease-out"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={clearFile}
+              className="flex h-9 flex-shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2.5 text-xs font-semibold text-muted-foreground shadow-sm transition hover:border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {showEmpty ? (
+        <button
+          type="button"
+          onClick={openPicker}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              openPicker()
+            }
+          }}
+          onDragEnter={onDragOver}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={`group relative w-full rounded-xl border-2 border-dashed border-border bg-muted/40 px-3 py-4 text-center transition sm:px-4 sm:py-5 ${
+            isDragging
+              ? 'border-[#D4A843] bg-accent/20 shadow-[inset_0_0_0_1px_rgba(212,168,67,0.35)]'
+              : error
+                ? 'border-destructive/50 bg-destructive/5 hover:border-destructive/70'
+                : 'hover:border-[#D4A843]/55 hover:bg-muted/60'
+          }`}
+          aria-label={
+            fieldLabel
+              ? `${fieldLabel}${required ? ' (required)' : ''} — drag and drop or click to upload`
+              : 'Upload file — drag and drop or click to browse'
+          }
+        >
+          <div className="pointer-events-none flex w-full flex-col items-center gap-2.5 px-0.5 text-center sm:gap-3">
+            {fieldLabel ? (
+              <p className="w-full text-sm font-semibold leading-snug text-foreground">
+                {fieldLabel} {required ? <span className="text-red-500">*</span> : null}
+              </p>
+            ) : null}
+            {formatsLine ? (
+              <p className="w-full max-w-xl text-[11px] leading-snug text-muted-foreground">{formatsLine}</p>
+            ) : (
+              <p className="w-full max-w-xl text-[11px] leading-snug text-muted-foreground">
+                PDF, images, or other accepted types · max {maxFileSizeMB} MB
+              </p>
+            )}
+            <span
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition ${
+                isDragging
+                  ? 'border-[#D4A843]/40 bg-[#D4A843]/15 text-[#b98a22]'
+                  : 'border-border bg-card text-muted-foreground group-hover:border-[#D4A843]/40 group-hover:text-[#D4A843]'
+              }`}
+            >
+              <Upload className="h-5 w-5" strokeWidth={1.6} />
+            </span>
+            <p className="text-sm font-semibold text-foreground/90">
+              {isDragging ? 'Drop file to upload' : 'Drag & drop or click to browse'}
+            </p>
+            {helperText ? (
+              <p id={`${id}-helper`} className="w-full max-w-xl text-[11px] leading-relaxed text-muted-foreground">
+                {helperText}
+              </p>
+            ) : null}
+            {error ? (
+              <p className="w-full max-w-xl text-xs font-medium leading-snug text-red-600">{error}</p>
+            ) : null}
+            {dropHint ? (
+              <p id={`${id}-hint`} className="w-full max-w-xl text-xs font-medium text-amber-700" role="status">
+                {dropHint}
+              </p>
+            ) : null}
+          </div>
+        </button>
+      ) : null}
+
+      {dropHint && !showEmpty ? (
+        <p id={`${id}-hint`} className="text-xs font-medium text-amber-700" role="status">
+          {dropHint}
+        </p>
+      ) : null}
+    </div>
+  )
+}

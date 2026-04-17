@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PrimaryButton from '../components/common/PrimaryButton.jsx'
+import DateInput from '../components/common/DateInput.jsx'
 
 const crestLogo =
   'https://d2xsxph8kpxj0f.cloudfront.net/310519663394975842/o5YxQXzG37vUfAnZtRoyQg/mucm-crest-logo_aac17a92.png'
@@ -45,13 +46,13 @@ function ProfilePage() {
   const initials = getInitials(userEmail)
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_right,#fff4d6_0%,#f7f6f3_35%,#eef2f7_100%)] px-3 py-6 [font-family:'Plus_Jakarta_Sans',sans-serif] sm:px-5 lg:px-8">
+    <main className="page-gutter-x min-h-screen bg-background py-6">
       {/* Top nav */}
       <div className="mx-auto mb-6 flex max-w-3xl items-center justify-between">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 rounded-lg border border-[#0A1628]/12 bg-white/80 px-3 py-2 text-sm font-medium text-[#0A1628]/70 shadow-sm backdrop-blur transition hover:bg-white hover:text-[#0A1628]"
+          className="flex items-center gap-2 rounded-lg border border-border bg-card/90 px-3 py-2 text-sm font-medium text-muted-foreground shadow-sm backdrop-blur transition hover:bg-card hover:text-foreground"
         >
           <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
@@ -60,7 +61,7 @@ function ProfilePage() {
         </button>
         <div className="flex items-center gap-2">
           <img src={crestLogo} alt="MUCM" className="h-8 w-8 rounded-lg border border-[#0A1628]/10 bg-white p-1 shadow-sm" />
-          <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#0A1628]/45">MUCM Portal</span>
+          <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">MUCM Portal</span>
         </div>
       </div>
 
@@ -84,11 +85,11 @@ function ProfilePage() {
         </div>
 
         {/* Form card */}
-        <form onSubmit={handleSave} className="rounded-3xl border border-[#0A1628]/10 bg-white p-6 shadow-sm sm:p-8">
-          <h2 className="text-lg font-semibold text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
+        <form onSubmit={handleSave} className="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
+          <h2 className="text-lg font-semibold text-foreground [font-family:'DM_Serif_Display',serif]">
             Personal Information
           </h2>
-          <p className="mt-0.5 text-xs text-[#0A1628]/45">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Update your personal details associated with this application account.
           </p>
 
@@ -101,32 +102,45 @@ function ProfilePage() {
               { name: 'dateOfBirth', label: 'Date of Birth', type: 'date', placeholder: '' },
             ].map((field) => (
               <div key={field.name} className={field.name === 'phone' || field.name === 'nationality' ? 'sm:col-span-1' : ''}>
-                <label className="block text-sm font-semibold text-[#0A1628]/85">
+                <label className="block text-sm font-medium text-foreground">
                   {field.label}
                 </label>
-                <input
-                  type={field.type}
-                  name={field.name}
-                  value={form[field.name]}
-                  onChange={handleChange}
-                  placeholder={field.placeholder}
-                  className="mt-1.5 w-full rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] px-3.5 py-2.5 text-sm text-[#0A1628] outline-none transition placeholder:text-[#0A1628]/30 focus:border-[#D4A843] focus:bg-white focus:shadow-[0_0_0_4px_rgba(212,168,67,0.18)]"
-                />
+                {field.type === 'date' ? (
+                  <DateInput
+                    name={field.name}
+                    value={form[field.name]}
+                    onChange={(next) => {
+                      setForm((prev) => ({ ...prev, [field.name]: next }))
+                      setSaved(false)
+                    }}
+                    placeholder="DD/MM/YYYY"
+                    className="mt-2 flex h-10 w-full rounded-md border border-input bg-background text-sm text-foreground transition focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background"
+                  />
+                ) : (
+                  <input
+                    type={field.type}
+                    name={field.name}
+                    value={form[field.name]}
+                    onChange={handleChange}
+                    placeholder={field.placeholder}
+                    className="mt-2 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  />
+                )}
               </div>
             ))}
 
             {/* Email — read-only */}
             <div>
-              <label className="block text-sm font-semibold text-[#0A1628]/85">
+              <label className="block text-sm font-medium text-foreground">
                 Email Address
               </label>
               <input
                 type="email"
                 value={userEmail}
                 readOnly
-                className="mt-1.5 w-full cursor-not-allowed rounded-xl border border-[#0A1628]/10 bg-[#0A1628]/4 px-3.5 py-2.5 text-sm text-[#0A1628]/50 outline-none"
+                className="mt-2 w-full cursor-not-allowed rounded-md border border-border bg-muted px-3 py-2.5 text-sm text-muted-foreground outline-none"
               />
-              <p className="mt-1 text-xs text-[#0A1628]/40">Email is linked to your login and cannot be changed here.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Email is linked to your login and cannot be changed here.</p>
             </div>
           </div>
 
@@ -144,11 +158,11 @@ function ProfilePage() {
         </form>
 
         {/* Account info card */}
-        <div className="rounded-3xl border border-[#0A1628]/10 bg-white p-6 shadow-sm sm:p-8">
-          <h2 className="text-lg font-semibold text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
+          <h2 className="text-lg font-semibold text-foreground [font-family:'DM_Serif_Display',serif]">
             Account Details
           </h2>
-          <p className="mt-0.5 text-xs text-[#0A1628]/45">Read-only account information managed by the admissions office.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Read-only account information managed by the admissions office.</p>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {[
               { label: 'Account Type', value: 'Applicant' },
@@ -156,9 +170,9 @@ function ProfilePage() {
               { label: 'Institution', value: 'Metropolitan University College of Medicine' },
               { label: 'Portal Access', value: 'Active' },
             ].map((item) => (
-              <div key={item.label} className="rounded-xl border border-[#0A1628]/8 bg-[#F8F7F4] px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#0A1628]/40">{item.label}</p>
-                <p className="mt-1 text-sm font-medium text-[#0A1628]/80">{item.value}</p>
+              <div key={item.label} className="rounded-xl border border-border bg-muted px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{item.label}</p>
+                <p className="mt-1 text-sm font-medium text-foreground/90">{item.value}</p>
               </div>
             ))}
           </div>

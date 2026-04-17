@@ -29,8 +29,8 @@ function BeforeYouBeginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-[#f5f3ef] via-[#f8f7f4] to-[#f6f4ef] px-3 py-6 [font-family:'Plus_Jakarta_Sans',sans-serif] sm:px-5 lg:px-8">
-      <section className="mx-auto w-full max-w-5xl overflow-hidden rounded-3xl border border-[#0A1628]/10 bg-white shadow-2xl shadow-[#0A1628]/10">
+    <main className="page-gutter-x min-h-screen bg-background py-6">
+      <section className="mx-auto w-full max-w-5xl overflow-hidden rounded-xl border border-border bg-card shadow-md">
         <header className="relative overflow-visible bg-[#0A1628] px-4 py-5 sm:px-7 sm:py-8">
           <div className="absolute -right-8 -top-10 h-40 w-40 rounded-full bg-[#D4A843]/10" />
           <div className="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-[#D4A843]/10" />
@@ -60,30 +60,30 @@ function BeforeYouBeginPage() {
           </div>
         </header>
 
-        <div className="space-y-4 px-4 py-5 sm:px-6 sm:py-6">
+        <div className="space-y-4 px-6 py-5 sm:px-8 sm:py-6">
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <article className="rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-3.5">
-              <h4 className="text-sm font-bold text-[#0A1628]/85">
+            <article className="rounded-xl border border-border bg-muted p-3.5">
+              <h4 className="text-sm font-bold text-foreground/90">
                 Allow 30-45 minutes
               </h4>
-              <p className="mt-1.5 text-sm leading-relaxed text-[#0A1628]/50">
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
                 The application has 8 sections. You can save your progress and
                 return later.
               </p>
             </article>
-            <article className="rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-3.5">
-              <h4 className="text-sm font-bold text-[#0A1628]/85">
+            <article className="rounded-xl border border-border bg-muted p-3.5">
+              <h4 className="text-sm font-bold text-foreground/90">
                 Have your documents ready
               </h4>
-              <p className="mt-1.5 text-sm leading-relaxed text-[#0A1628]/50">
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
                 Scanned copies in PDF, JPEG, or PNG format (max 5MB each).
               </p>
             </article>
-            <article className="rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-3.5">
-              <h4 className="text-sm font-bold text-[#0A1628]/85">
+            <article className="rounded-xl border border-border bg-muted p-3.5">
+              <h4 className="text-sm font-bold text-foreground/90">
                 Financial information
               </h4>
-              <p className="mt-1.5 text-sm leading-relaxed text-[#0A1628]/50">
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
                 You&apos;ll need details about how your education will be funded.
               </p>
             </article>

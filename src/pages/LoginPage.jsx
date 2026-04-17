@@ -31,8 +31,8 @@ function LoginPage({ onLogin, demoEmail, demoOtp }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_right,#fff4d6_0%,#f7f6f3_35%,#eef2f7_100%)] px-4 py-8 [font-family:'Plus_Jakarta_Sans',sans-serif]">
-      <section className="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-[#0A1628]/10 bg-white shadow-2xl shadow-[#0A1628]/15 lg:grid-cols-[1.05fr_1fr]">
+    <main className="page-gutter-x flex min-h-screen items-center justify-center bg-background py-8">
+      <section className="grid w-full max-w-5xl overflow-hidden rounded-xl border border-border bg-card shadow-md lg:grid-cols-[1.05fr_1fr]">
         <aside className="relative hidden overflow-hidden bg-gradient-to-br from-[#071427] via-[#0A1628] to-[#163457] p-8 text-white lg:block">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(212,168,67,0.24),transparent_45%)]" />
           <div className="absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-white/5" />

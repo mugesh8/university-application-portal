@@ -42,9 +42,9 @@ function SubmissionAnswers({ formValues }) {
       {stepsWithFields.map(({ step, visibleFields }) => (
         <div
           key={step.id}
-          className="overflow-hidden rounded-xl border border-[#0A1628]/10 bg-white shadow-sm"
+          className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
         >
-          <div className="border-b border-[#0A1628]/8 bg-[#F8F7F4] px-4 py-2.5 sm:px-5">
+          <div className="border-b border-[#0A1628]/8 bg-[#F8F7F4] px-5 py-2.5 sm:px-6">
             <h4 className="text-base font-semibold text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
               {step.title}
             </h4>
@@ -52,7 +52,7 @@ function SubmissionAnswers({ formValues }) {
               <p className="mt-0.5 text-xs text-[#0A1628]/50">{step.description}</p>
             ) : null}
           </div>
-          <div className="space-y-0 p-4 sm:p-5">
+          <div className="space-y-0 p-5 sm:p-6">
             {visibleFields.map((field) => (
               <div
                 key={`${step.id}-${field.name}`}
@@ -147,14 +147,14 @@ function SubmittedApplicationsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_right,#fff4d6_0%,#f7f6f3_35%,#eef2f7_100%)] [font-family:'Plus_Jakarta_Sans',sans-serif]">
-      <header className="border-b border-[#0A1628]/10 bg-white/70 px-4 py-3 backdrop-blur-md sm:px-6 lg:hidden">
+    <main className="min-h-screen bg-background">
+      <header className="page-gutter-x border-b border-border bg-card/95 py-3 backdrop-blur-md lg:hidden">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <img
               src={crestLogo}
               alt="MUCM Crest"
-              className="h-10 w-10 rounded-lg border border-[#0A1628]/10 bg-white p-1 shadow-sm"
+              className="h-10 w-10 rounded-lg border border-border bg-card p-1 shadow-sm"
             />
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#0A1628]/45">
@@ -173,12 +173,12 @@ function SubmittedApplicationsPage() {
         <StepSidebar activeModule={activeModule} onModuleChange={handleModuleChange} />
 
         <section className="flex flex-col lg:h-[100dvh] lg:overflow-y-auto">
-          <div className="hidden items-center justify-between border-b border-[#0A1628]/10 bg-white/80 px-7 py-2.5 backdrop-blur-md lg:sticky lg:top-0 lg:z-20 lg:flex">
+          <div className="page-gutter-x hidden items-center justify-between border-b border-border bg-card/95 py-2.5 backdrop-blur-md lg:sticky lg:top-0 lg:z-20 lg:flex">
             <div className="flex items-center gap-3">
               <img
                 src={crestLogo}
                 alt="MUCM Crest"
-                className="h-10 w-10 rounded-xl border border-[#0A1628]/10 bg-white p-1 shadow-sm"
+                className="h-10 w-10 rounded-xl border border-border bg-card p-1 shadow-sm"
               />
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0A1628]/45">
@@ -200,9 +200,9 @@ function SubmittedApplicationsPage() {
             </div>
           </div>
 
-          <div className="space-y-3 p-3 sm:p-5 lg:p-6">
+          <div className="page-gutter-x space-y-3 py-3 sm:py-5 lg:py-6">
             {submissions.length === 0 ? (
-              <div className="rounded-2xl border border-[#0A1628]/10 bg-white p-6 text-center shadow-sm">
+              <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
                 <h2 className="text-2xl text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
                   No submitted applications yet
                 </h2>
@@ -221,11 +221,11 @@ function SubmittedApplicationsPage() {
                   return (
                     <article
                       key={submission.id}
-                      className="overflow-hidden rounded-2xl border border-[#0A1628]/10 bg-white shadow-sm"
+                      className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
                     >
                       <button
                         type="button"
-                        className="w-full px-4 py-3 text-left transition hover:bg-[#F8F7F4] sm:px-5"
+                        className="w-full px-6 py-3 text-left transition hover:bg-[#F8F7F4] sm:px-8"
                         onClick={() => setExpandedId((prev) => (prev === submission.id ? '' : submission.id))}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -250,9 +250,9 @@ function SubmittedApplicationsPage() {
                       </button>
 
                       {isExpanded ? (
-                        <div className="border-t border-[#0A1628]/8 bg-[#F8F7F4] px-4 py-4 sm:px-5">
+                        <div className="border-t border-[#0A1628]/8 bg-[#F8F7F4] px-6 py-4 sm:px-8">
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <div className="rounded-xl border border-[#0A1628]/10 bg-white p-3">
+                            <div className="rounded-xl border border-border bg-card p-3">
                               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
                                 Applicant Details
                               </p>
@@ -266,7 +266,7 @@ function SubmittedApplicationsPage() {
                                 Phone: {submission.formValues?.phoneMobile || 'Not provided'}
                               </p>
                             </div>
-                            <div className="rounded-xl border border-[#0A1628]/10 bg-white p-3">
+                            <div className="rounded-xl border border-border bg-card p-3">
                               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
                                 Application Meta
                               </p>
@@ -281,7 +281,7 @@ function SubmittedApplicationsPage() {
 
                           <SubmissionAnswers formValues={submission.formValues} />
 
-                          <div className="mt-3 rounded-xl border border-[#0A1628]/10 bg-white p-3">
+                          <div className="mt-3 rounded-xl border border-border bg-card p-3">
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
                               Documents
                             </p>

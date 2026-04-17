@@ -653,8 +653,9 @@ export const applicationSteps = [
         type: 'select',
         options: referralSourceOptions,
         placeholder: 'Select an option',
+        section: 'Referral',
       },
-      { name: 'howHeardOther', label: 'Please specify', type: 'text' },
+      { name: 'howHeardOther', label: 'Please specify', type: 'text', section: 'Referral' },
     ],
   },
   {

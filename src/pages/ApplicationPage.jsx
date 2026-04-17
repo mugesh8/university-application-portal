@@ -213,6 +213,17 @@ function ApplicationPage() {
       }
     }
 
+    if (field.type === 'date' && stringValue) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(stringValue))) {
+        return 'Please enter a valid date as DD/MM/YYYY.'
+      }
+      const [y, mo, d] = String(stringValue).split('-').map(Number)
+      const dt = new Date(y, mo - 1, d)
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) {
+        return 'Please enter a valid date.'
+      }
+    }
+
     return ''
   }
 
@@ -459,8 +470,8 @@ function ApplicationPage() {
       ).length
 
       return (
-        <section className="space-y-4 p-3 sm:p-6 lg:p-8">
-          <div className="rounded-2xl border border-[#0A1628]/10 bg-white p-4 shadow-sm sm:p-5">
+        <section className="page-gutter-x space-y-4 py-4 sm:py-6 lg:py-8">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0A1628]/45">
               Activity Hub
             </p>
@@ -473,7 +484,7 @@ function ApplicationPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-[#0A1628]/10 bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0A1628]/45">Total Alerts</p>
               <p className="mt-1 text-2xl font-semibold text-[#0A1628]">
                 {notificationItems.length}
@@ -489,12 +500,12 @@ function ApplicationPage() {
             </div>
           </div>
 
-          <div className="space-y-3 rounded-2xl border border-[#0A1628]/10 bg-white p-4 shadow-sm sm:p-5">
+          <div className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <h3 className="text-lg font-semibold text-[#0A1628]">Recent Activity</h3>
             {notificationItems.map((item, index) => (
               <article
                 key={item.title}
-                className="relative rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-4"
+                className="relative rounded-xl border border-border bg-muted p-4"
               >
                 {index !== notificationItems.length - 1 ? (
                   <span className="pointer-events-none absolute bottom-[-14px] left-4 top-[calc(100%_-_4px)] w-px bg-[#0A1628]/12" />
@@ -525,13 +536,13 @@ function ApplicationPage() {
       const supportTabButtonClass = (id) =>
         `inline-flex min-h-[2.5rem] flex-1 items-center justify-center rounded-lg px-4 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4A843] sm:flex-none sm:min-w-[7.5rem] ${
           tab === id
-            ? 'bg-white text-[#0A1628] shadow-sm ring-1 ring-[#D4A843]/50'
-            : 'text-[#0A1628]/55 hover:bg-white/60 hover:text-[#0A1628]'
+            ? 'bg-[#f8f8f7] text-[#0A1628] shadow-sm ring-1 ring-[#D4A843]/50'
+            : 'text-[#0A1628]/55 hover:bg-[#f8f8f7]/70 hover:text-[#0A1628]'
         }`
 
       return (
-        <section className="space-y-4 p-3 sm:p-6 lg:p-8">
-          <div className="rounded-2xl border border-[#0A1628]/10 bg-white p-4 shadow-sm sm:p-5">
+        <section className="page-gutter-x space-y-4 py-4 sm:py-6 lg:py-8">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0A1628]/45">
               Support Center
             </p>
@@ -550,7 +561,7 @@ function ApplicationPage() {
             role="tablist"
             aria-label="Support center sections"
           >
-            <div className="inline-flex w-full max-w-md rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-1 sm:w-auto">
+            <div className="inline-flex w-full max-w-md rounded-xl border border-border bg-muted p-1 sm:w-auto">
               <button
                 type="button"
                 role="tab"
@@ -579,7 +590,7 @@ function ApplicationPage() {
               role="tabpanel"
               id="support-panel-faq"
               aria-labelledby="support-tab-faq"
-              className="space-y-3 rounded-2xl border border-[#0A1628]/10 bg-white p-4 shadow-sm sm:p-5"
+              className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5"
             >
               {faqSections.map((section) => (
                 <div key={section.title} className="space-y-2">
@@ -589,7 +600,7 @@ function ApplicationPage() {
                   {section.items.map((item) => (
                     <details
                       key={item.question}
-                      className="group rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] px-3 py-2.5"
+                      className="group rounded-xl border border-border bg-muted px-3 py-2.5"
                     >
                       <summary className="cursor-pointer list-none text-sm font-semibold text-[#0A1628] [&::-webkit-details-marker]:hidden">
                         <span className="flex items-center justify-between gap-2">
@@ -619,13 +630,13 @@ function ApplicationPage() {
                 <p className="mt-1 text-sm text-[#0A1628]/60">{faqSupport.description}</p>
                 <a
                   href={`mailto:${faqSupport.email}`}
-                  className="mt-4 inline-flex rounded-lg border border-[#D4A843]/40 bg-white px-3 py-2 text-sm font-semibold text-[#0A1628] transition hover:bg-[#fff1c9]"
+                  className="mt-4 inline-flex rounded-lg border border-[#D4A843]/40 bg-[#f8f8f7] px-3 py-2 text-sm font-semibold text-[#0A1628] transition hover:bg-[#fff1c9]"
                 >
                   {faqSupport.email}
                 </a>
 
                 <form
-                  className="mt-4 rounded-xl border border-[#0A1628]/10 bg-white p-3"
+                  className="mt-4 rounded-xl border border-border bg-card p-3"
                   onSubmit={handleRaiseTicket}
                 >
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#0A1628]/45">
@@ -638,7 +649,7 @@ function ApplicationPage() {
                       value={ticketForm.subject}
                       onChange={(event) => updateTicketField('subject', event.target.value)}
                       placeholder="Issue with upload / payment / form"
-                      className="mt-1 w-full rounded-lg border border-[#0A1628]/12 bg-white px-3 py-2 text-sm text-[#0A1628] outline-none transition placeholder:text-[#0A1628]/35 focus:border-[#D4A843]"
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-[#0A1628] outline-none transition placeholder:text-[#0A1628]/35 focus:border-[#D4A843]"
                     />
                   </label>
                   <label className="mt-2 block">
@@ -647,7 +658,7 @@ function ApplicationPage() {
                       value={ticketForm.message}
                       onChange={(event) => updateTicketField('message', event.target.value)}
                       placeholder="Describe the issue clearly..."
-                      className="mt-1 min-h-24 w-full resize-y rounded-lg border border-[#0A1628]/12 bg-white px-3 py-2 text-sm text-[#0A1628] outline-none transition placeholder:text-[#0A1628]/35 focus:border-[#D4A843]"
+                      className="mt-1 min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-[#0A1628] outline-none transition placeholder:text-[#0A1628]/35 focus:border-[#D4A843]"
                     />
                   </label>
                   <button
@@ -704,7 +715,7 @@ function ApplicationPage() {
                           return (
                             <li
                               key={ticket.id ?? `ticket-${ticketIndex}`}
-                              className={`rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] p-3 shadow-sm ${statusBorderClass}`}
+                              className={`rounded-xl border border-border bg-muted p-3 shadow-sm ${statusBorderClass}`}
                             >
                               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="min-w-0 space-y-1">
@@ -762,7 +773,7 @@ function ApplicationPage() {
                                     Your message
                                   </dt>
                                   <dd className="mt-1">
-                                    <div className="max-h-36 overflow-y-auto rounded-lg border border-[#0A1628]/10 bg-white/90 px-3 py-2.5 text-sm leading-relaxed text-[#0A1628]/85 [overflow-wrap:anywhere] whitespace-pre-wrap">
+                                    <div className="max-h-36 overflow-y-auto rounded-lg border border-border bg-card/95 px-3 py-2.5 text-sm leading-relaxed text-[#0A1628]/85 [overflow-wrap:anywhere] whitespace-pre-wrap">
                                       {ticket.message ?? '—'}
                                     </div>
                                   </dd>
@@ -790,8 +801,8 @@ function ApplicationPage() {
         : 0
 
       return (
-        <section className="space-y-4 p-3 sm:p-6 lg:p-8">
-          <div className="rounded-2xl border border-[#0A1628]/10 bg-white p-4 shadow-sm sm:p-5">
+        <section className="page-gutter-x space-y-4 py-4 sm:py-6 lg:py-8">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0A1628]/45">
               File Management
             </p>
@@ -804,13 +815,13 @@ function ApplicationPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-[#0A1628]/10 bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0A1628]/45">Required Uploaded</p>
               <p className="mt-1 text-2xl font-semibold text-[#0A1628]">
                 {uploadedRequiredCount}/{requiredDocs.length}
               </p>
             </div>
-            <div className="rounded-xl border border-[#0A1628]/10 bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0A1628]/45">Total Files</p>
               <p className="mt-1 text-2xl font-semibold text-[#0A1628]">{uploadedDocuments.length}</p>
             </div>
@@ -820,7 +831,7 @@ function ApplicationPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-[#0A1628]/10 bg-white p-4 shadow-sm sm:p-5">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
             <div className="mb-4">
               <div className="flex items-center justify-between text-xs text-[#0A1628]/55">
                 <span>Required documents completion</span>
@@ -838,7 +849,7 @@ function ApplicationPage() {
               {uploadedDocuments.map((item) => (
                 <div
                   key={item.label}
-                  className="flex flex-col gap-2 rounded-xl border border-[#0A1628]/10 bg-[#F8F7F4] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-2 rounded-xl border border-border bg-muted px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[#0A1628]/85">{item.label}</p>
@@ -889,9 +900,9 @@ function ApplicationPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_right,#fff4d6_0%,#f7f6f3_35%,#eef2f7_100%)] [font-family:'Plus_Jakarta_Sans',sans-serif]">
+    <main className="min-h-screen bg-background">
       {!submitted ? (
-        <header className="border-b border-[#0A1628]/10 bg-white/70 px-4 py-3 backdrop-blur-md sm:px-6 lg:hidden">
+        <header className="page-gutter-x border-b border-border bg-card/95 py-3 backdrop-blur-md lg:hidden">
           <div className="mx-auto flex max-w-7xl flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
@@ -926,7 +937,7 @@ function ApplicationPage() {
       ) : null}
 
       {!submitted ? (
-        <div className="border-b border-[#0A1628]/10 bg-white/55 px-3 py-2 backdrop-blur lg:hidden">
+        <div className="page-gutter-x border-b border-border bg-card/90 py-2 backdrop-blur lg:hidden">
           <div className="flex gap-2 overflow-x-auto pb-1">
             {moduleNavigation.map((module) => (
               <button
@@ -936,7 +947,7 @@ function ApplicationPage() {
                 className={`whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
                   activeModule === module.name
                     ? 'border-[#D4A843]/70 bg-[#D4A843]/20 text-[#0A1628]'
-                    : 'border-[#0A1628]/15 bg-white/70 text-[#0A1628]/65'
+                    : 'border-border bg-card/95 text-muted-foreground'
                 }`}
               >
                 {module.name}
@@ -947,7 +958,7 @@ function ApplicationPage() {
       ) : null}
 
       {submitted ? (
-        <section className="mx-auto w-[min(780px,92%)] py-8 text-center sm:py-10">
+        <section className="page-gutter-x mx-auto w-full max-w-[780px] py-8 text-center sm:py-10">
           <div className="mx-auto flex w-fit items-center gap-2 text-[#0A1628]/35">
             <img
               src={crestLogo}
@@ -982,7 +993,7 @@ function ApplicationPage() {
             </p>
           ) : null}
 
-          <div className="mx-auto mt-8 max-w-xl rounded-2xl border border-[#0A1628]/10 bg-white p-5 text-left shadow-lg shadow-[#0A1628]/8">
+          <div className="mx-auto mt-8 max-w-xl rounded-xl border border-border bg-card p-5 text-left shadow-lg shadow-[#0A1628]/8">
             <h3 className="text-base font-bold uppercase tracking-[0.12em] text-[#0A1628]">
               What Happens Next
             </h3>
@@ -1053,13 +1064,13 @@ function ApplicationPage() {
             activeModule={activeModule}
             onModuleChange={handleModuleChange}
           />
-          <section ref={desktopScrollRef} className="flex flex-col lg:h-[100dvh] lg:overflow-y-auto">
-            <div className="hidden items-center justify-between border-b border-[#0A1628]/10 bg-white/80 px-7 py-2.5 backdrop-blur-md lg:sticky lg:top-0 lg:z-20 lg:flex">
+          <section ref={desktopScrollRef} className="flex min-h-0 flex-col lg:h-[100dvh] lg:overflow-y-auto">
+            <div className="page-gutter-x hidden items-center justify-between border-b border-border bg-card/95 py-2.5 backdrop-blur-md lg:sticky lg:top-0 lg:z-20 lg:flex">
               <div className="flex items-center gap-3">
                 <img
                   src={crestLogo}
                   alt="MUCM Crest"
-                  className="h-10 w-10 rounded-xl border border-[#0A1628]/10 bg-white p-1 shadow-sm"
+                  className="h-10 w-10 rounded-xl border border-border bg-card p-1 shadow-sm"
                 />
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0A1628]/45">

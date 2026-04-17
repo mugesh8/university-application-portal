@@ -31,11 +31,11 @@ function DocumentListSection({ title, items, checked = {}, onToggle }) {
   return (
     <section className="space-y-2">
       <div className="flex items-center gap-2">
-        <div className="h-px flex-1 bg-[#0A1628]/10" />
-        <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-[#0A1628]/45">
+        <div className="h-px flex-1 bg-border" />
+        <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
           {title}
         </h3>
-        <div className="h-px flex-1 bg-[#0A1628]/10" />
+        <div className="h-px flex-1 bg-border" />
       </div>
       <div className="space-y-2">
         {items.map((item) => {
@@ -43,10 +43,10 @@ function DocumentListSection({ title, items, checked = {}, onToggle }) {
           return (
             <article
               key={item.id}
-              className={`rounded-2xl border bg-white px-3 py-3 transition sm:px-4 ${
+              className={`rounded-xl border border-border bg-card px-3 py-3 transition sm:px-4 ${
                 isChecked
                   ? 'border-[#D4A843]/70 shadow-[0_8px_24px_rgba(16,185,129,0.12)]'
-                  : 'border-[#0A1628]/12'
+                  : 'border-border'
               }`}
             >
               <div className="flex items-start gap-3">

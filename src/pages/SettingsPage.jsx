@@ -69,13 +69,13 @@ function SettingsPage() {
   ]
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_right,#fff4d6_0%,#f7f6f3_35%,#eef2f7_100%)] px-3 py-6 [font-family:'Plus_Jakarta_Sans',sans-serif] sm:px-5 lg:px-8">
+    <main className="page-gutter-x min-h-screen bg-background py-6">
       {/* Top nav */}
       <div className="mx-auto mb-6 flex max-w-3xl items-center justify-between">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 rounded-lg border border-[#0A1628]/12 bg-white/80 px-3 py-2 text-sm font-medium text-[#0A1628]/70 shadow-sm backdrop-blur transition hover:bg-white hover:text-[#0A1628]"
+          className="flex items-center gap-2 rounded-lg border border-[#0A1628]/12 bg-[#f8f8f7]/95 px-3 py-2 text-sm font-medium text-[#0A1628]/70 shadow-sm backdrop-blur transition hover:bg-[#f8f8f7] hover:text-[#0A1628]"
         >
           <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
@@ -106,7 +106,7 @@ function SettingsPage() {
 
         {/* Settings sections */}
         {sections.map((section) => (
-          <div key={section.id} className="rounded-3xl border border-[#0A1628]/10 bg-white shadow-sm">
+          <div key={section.id} className="rounded-2xl border border-[#0A1628]/10 bg-[#f8f8f7] shadow-sm">
             <div className="flex items-center gap-3 border-b border-[#0A1628]/8 px-6 py-4">
               <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#0A1628]/6 text-[#0A1628]/55">
                 {section.icon}
@@ -131,7 +131,7 @@ function SettingsPage() {
         ))}
 
         {/* Danger zone */}
-        <div className="rounded-3xl border border-red-200/70 bg-white shadow-sm">
+        <div className="rounded-2xl border border-red-200/70 bg-[#f8f8f7] shadow-sm">
           <div className="flex items-center gap-3 border-b border-red-100 px-6 py-4">
             <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-500">
               <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">

@@ -4,6 +4,13 @@ import { normalizeSelectOptions } from './formVisibility.js'
  * Human-readable value for a single form field (read-only), aligned with StepForm review.
  */
 export function getSingleFieldDisplayValue(field, rawValue) {
+  if (field.type === 'file') {
+    if (rawValue === undefined || rawValue === null || rawValue === '') {
+      return 'Not uploaded'
+    }
+    return String(rawValue)
+  }
+
   if (rawValue === undefined || rawValue === null || rawValue === '') {
     return 'Not provided'
   }
