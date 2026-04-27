@@ -54,6 +54,14 @@ function runUploadProgress(onProgress, signal) {
     })
 }
 
+function isImageAccept(accept) {
+  const exts = parseAcceptExtensions(accept)
+  return exts.every((e) => {
+    const x = e.startsWith('.') ? e : `.${e}`
+    return ['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(x)
+  })
+}
+
 export default function FileDropzone({
   accept = '.pdf,.jpg,.jpeg,.png',
   maxFileSizeMB = 5,
@@ -69,6 +77,10 @@ export default function FileDropzone({
   helperText,
   /** +1 when a simulated upload starts, −1 when it ends (success, cancel, or error). */
   onUploadActivityChange,
+  /** If true (image-only accepts), store a data URL so the UI can preview the image. */
+  storeAsDataUrl = false,
+  /** Smaller dropzone / success card (e.g. signature). */
+  compact = false,
 }) {
   const inputRef = useRef(null)
   const abortRef = useRef(null)
@@ -78,7 +90,9 @@ export default function FileDropzone({
   const [isUploading, setIsUploading] = useState(false)
   const [pendingFileName, setPendingFileName] = useState('')
   const id = useId()
-  const hasFile = Boolean(value && String(value).trim())
+  const valueStr = value != null ? String(value) : ''
+  const isDataUrlImage = valueStr.startsWith('data:image/')
+  const hasFile = Boolean(valueStr.trim())
 
   const resetInput = useCallback(() => {
     if (inputRef.current) {
@@ -118,10 +132,25 @@ export default function FileDropzone({
 
   const finalizeFile = useCallback(
     (file) => {
+      const useData =
+        storeAsDataUrl && isImageAccept(accept) && file.type.startsWith('image/')
+      if (useData) {
+        const reader = new FileReader()
+        reader.onload = () => {
+          onChange(reader.result)
+          syncInputFile(file)
+        }
+        reader.onerror = () => {
+          onChange(file.name)
+          syncInputFile(file)
+        }
+        reader.readAsDataURL(file)
+        return
+      }
       onChange(file.name)
       syncInputFile(file)
     },
-    [onChange, syncInputFile],
+    [accept, onChange, storeAsDataUrl, syncInputFile],
   )
 
   const startUpload = useCallback(
@@ -242,26 +271,50 @@ export default function FileDropzone({
       />
 
       {hasFile && !showProgress ? (
-        <div className="relative overflow-hidden rounded-xl border border-[#D4A843]/70 bg-card px-3 py-2.5 shadow-[0_8px_24px_rgba(16,185,129,0.12)] transition sm:px-3.5 sm:py-3">
-          <div className="flex items-start gap-2.5">
-            <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#16A34A]/12 text-[#16A34A]">
-              <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
-            </span>
-            <div className="min-w-0 flex-1 pt-0.5">
-              {fieldLabel ? (
-                <p className="text-sm font-semibold leading-snug text-foreground">
-                  {fieldLabel} {required ? <span className="text-red-500">*</span> : null}
+        <div
+          className={`relative overflow-hidden rounded-xl border border-[#D4A843]/70 bg-card shadow-[0_8px_24px_rgba(16,185,129,0.12)] transition ${
+            compact ? 'px-2.5 py-2 sm:px-3 sm:py-2.5' : 'px-3 py-2.5 sm:px-3.5 sm:py-3'
+          }`}
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className={`flex min-w-0 gap-2.5 ${isDataUrlImage ? 'flex-col sm:flex-row sm:items-start' : 'items-start'}`}>
+              {isDataUrlImage ? (
+                <div className="flex-shrink-0 rounded-lg border border-[#0A1628]/10 bg-white p-1 shadow-sm">
+                  <img
+                    src={valueStr}
+                    alt="Uploaded signature"
+                    className={`block max-h-14 w-auto max-w-[200px] object-contain object-left sm:max-h-16 ${compact ? 'max-h-12 max-w-[160px] sm:max-h-14' : ''}`}
+                  />
+                </div>
+              ) : (
+                <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#16A34A]/12 text-[#16A34A] sm:h-8 sm:w-8">
+                  <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={1.8} />
+                </span>
+              )}
+              <div className="min-w-0 pt-0.5">
+                {fieldLabel ? (
+                  <p className={`font-semibold leading-snug text-foreground ${compact ? 'text-xs sm:text-sm' : 'text-sm'}`}>
+                    {fieldLabel} {required ? <span className="text-red-500">*</span> : null}
+                  </p>
+                ) : null}
+                <p
+                  className={`font-semibold text-[#16A34A] ${fieldLabel ? 'mt-0.5' : ''} ${compact ? 'text-xs' : 'text-sm'}`}
+                >
+                  {isDataUrlImage ? 'Signature image added' : 'File added'}
                 </p>
-              ) : null}
-              <p className={`text-sm font-semibold text-[#16A34A] ${fieldLabel ? 'mt-1.5' : ''}`}>File added</p>
-              <p className="mt-0.5 truncate text-sm text-[#16A34A]/90" title={value}>
-                {value}
-              </p>
+                {!isDataUrlImage ? (
+                  <p className="mt-0.5 truncate text-xs text-[#16A34A]/90 sm:text-sm" title={valueStr}>
+                    {valueStr}
+                  </p>
+                ) : null}
+              </div>
             </div>
             <button
               type="button"
               onClick={clearFile}
-              className="flex h-9 flex-shrink-0 items-center gap-1 rounded-md border border-border bg-background px-2.5 text-xs font-semibold text-muted-foreground shadow-sm transition hover:border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
+              className={`flex shrink-0 items-center gap-1 self-start rounded-md border border-border bg-background font-semibold text-muted-foreground shadow-sm transition hover:border-destructive/30 hover:bg-destructive/5 hover:text-destructive sm:self-center ${
+                compact ? 'h-7 px-2 text-[11px]' : 'h-8 px-2.5 text-xs sm:h-9'
+              }`}
             >
               <X className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
               Remove
@@ -293,7 +346,7 @@ export default function FileDropzone({
                 <p className="text-sm font-semibold text-foreground">Uploading…</p>
                 <span className="text-xs font-bold tabular-nums text-[#D4A843]">{uploadProgress}%</span>
               </div>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground" title={pendingFileName}>
+              <p className="mt-0.5 truncate text-sm text-muted-foreground" title={pendingFileName}>
                 {pendingFileName}
               </p>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -329,7 +382,9 @@ export default function FileDropzone({
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`group relative w-full rounded-xl border-2 border-dashed border-border bg-muted/40 px-3 py-2.5 text-left transition sm:px-4 sm:py-3 ${
+          className={`group relative w-full rounded-xl border-2 border-dashed border-border bg-muted/40 text-left transition ${
+            compact ? 'px-2.5 py-2 sm:px-3 sm:py-2.5' : 'px-3 py-2.5 sm:px-4 sm:py-3'
+          } ${
             isDragging
               ? 'border-[#D4A843] bg-accent/20 shadow-[inset_0_0_0_1px_rgba(212,168,67,0.35)]'
               : error
@@ -342,39 +397,45 @@ export default function FileDropzone({
               : 'Upload file — drag and drop or click to browse'
           }
         >
-          <div className="pointer-events-none flex w-full flex-col gap-1.5 sm:gap-2">
+          <div className={`pointer-events-none flex w-full flex-col ${compact ? 'gap-1' : 'gap-1.5 sm:gap-2'}`}>
             {fieldLabel ? (
-              <p className="w-full text-center text-sm font-semibold leading-tight text-foreground sm:text-left">
+              <p
+                className={`w-full text-center font-semibold leading-tight text-foreground sm:text-left ${compact ? 'text-xs' : 'text-sm'}`}
+              >
                 {fieldLabel} {required ? <span className="text-red-500">*</span> : null}
               </p>
             ) : null}
             {formatsLine ? (
-              <p className="w-full text-center text-[10px] leading-snug text-muted-foreground sm:text-left">
+              <p
+                className="w-full text-center text-xs leading-snug text-muted-foreground sm:text-left sm:text-sm"
+              >
                 {formatsLine}
               </p>
             ) : (
-              <p className="w-full text-center text-[10px] leading-snug text-muted-foreground sm:text-left">
+              <p className="w-full text-center text-xs leading-snug text-muted-foreground sm:text-left sm:text-sm">
                 PDF, images, or other accepted types · max {maxFileSizeMB} MB
               </p>
             )}
-            <div className="flex items-center gap-3 pt-0.5">
+            <div className={`flex items-center gap-2 pt-0.5 sm:gap-3 ${compact ? '' : ''}`}>
               <span
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border shadow-sm transition ${
+                className={`flex shrink-0 items-center justify-center rounded-lg border shadow-sm transition ${
+                  compact ? 'h-7 w-7' : 'h-8 w-8'
+                } ${
                   isDragging
                     ? 'border-[#D4A843]/40 bg-[#D4A843]/15 text-[#b98a22]'
                     : 'border-border bg-card text-muted-foreground group-hover:border-[#D4A843]/40 group-hover:text-[#D4A843]'
                 }`}
               >
-                <Upload className="h-4 w-4" strokeWidth={1.6} />
+                <Upload className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} strokeWidth={1.6} />
               </span>
               <div className="min-w-0 flex-1 text-left">
-                <p className="text-sm font-semibold leading-snug text-foreground/90">
+                <p className={`font-semibold leading-snug text-foreground/90 ${compact ? 'text-xs' : 'text-sm'}`}>
                   {isDragging ? 'Drop file to upload' : 'Drag & drop or click to browse'}
                 </p>
                 {helperText ? (
                   <p
                     id={`${id}-helper`}
-                    className="mt-0.5 text-[11px] leading-snug text-muted-foreground"
+                    className={`mt-0.5 leading-snug text-muted-foreground ${compact ? 'text-xs sm:text-sm' : 'text-sm'}`}
                   >
                     {helperText}
                   </p>

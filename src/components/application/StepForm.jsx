@@ -136,7 +136,7 @@ function SectionHeader({ title, subtitle, compact = false }) {
           {title}
         </h3>
         {subtitle ? (
-          <p className={`mt-0.5 text-muted-foreground ${compact ? 'text-[11px] leading-relaxed' : 'text-xs'}`}>{subtitle}</p>
+          <p className={`mt-0.5 text-muted-foreground ${compact ? 'text-sm leading-relaxed' : 'text-sm'}`}>{subtitle}</p>
         ) : null}
       </div>
     </div>
@@ -145,7 +145,7 @@ function SectionHeader({ title, subtitle, compact = false }) {
 
 /**
  * SectionHeader already shows noteTitle + noteBody for note-divider groups.
- * Avoid rendering those again inside FormField; keep badge / callout / bullets only.
+ * Avoid rendering those again inside FormField; keep badge / callout / bullets / downloadLink only.
  */
 function getNoteFieldForForm(group) {
   const note = group.noteField
@@ -155,7 +155,8 @@ function getNoteFieldForForm(group) {
   const hasMore =
     stripped.noteBadge ||
     stripped.noteCallout ||
-    (stripped.reviewBullets && stripped.reviewBullets.length > 0)
+    (stripped.reviewBullets && stripped.reviewBullets.length > 0) ||
+    Boolean(stripped.downloadLink)
   return hasMore ? stripped : null
 }
 
@@ -190,6 +191,7 @@ function StepGroupPanel({
             error={errors[group.noteField.name]}
             onChange={onChange}
             onUploadActivityChange={onUploadActivityChange}
+            allValues={values}
           />
         </div>
       ) : null}
@@ -217,6 +219,7 @@ function StepGroupPanel({
                   error={errors[field.name]}
                   onChange={onChange}
                   onUploadActivityChange={onUploadActivityChange}
+                  allValues={values}
                 />
               </div>
             )
@@ -319,6 +322,13 @@ function StepForm({
     setUploadActivityCount(0)
   }, [step.id])
 
+  useEffect(() => {
+    // 4-year MD should not keep "Premedical Program" selected.
+    if (values.programType === '4year' && values.subProgram === 'premedical') {
+      onChange('subProgram', '')
+    }
+  }, [values.programType, values.subProgram, onChange])
+
   const fileFieldStats = useMemo(() => {
     const fileFields = step.fields.filter(
       (f) => f.type === 'file' && isFieldVisible(f, values),
@@ -410,13 +420,13 @@ function StepForm({
               {step.title}
             </h2>
             {step.description ? (
-              <p className="mt-0.5 text-[11px] text-white/60 sm:text-xs">{step.description}</p>
+              <p className="mt-0.5 text-sm text-white/60 sm:text-base">{step.description}</p>
             ) : null}
           </div>
         </div>
         {isReviewStep ? null : (
           <div className="px-6 py-1.5 sm:px-8 sm:py-2">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span className="font-medium">Overall Progress</span>
               <span className="font-bold text-foreground">{progressPercent}%</span>
             </div>
@@ -438,7 +448,7 @@ function StepForm({
         <div
           className={`flex items-center justify-between border-b border-border px-6 sm:px-8 ${isReviewStep ? 'py-1 sm:py-1' : 'py-1.5'}`}
         >
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-muted-foreground">
             Application Progress
           </p>
           <span className="rounded-full bg-[#D4A843]/12 px-3 py-1 text-xs font-bold text-[#7a5a14]">
@@ -506,9 +516,7 @@ function StepForm({
 
                     {/* Label */}
                     <span
-                      className={`max-w-[72px] text-center font-semibold leading-tight transition-colors ${
-                        isReviewStep ? 'text-[10px] sm:text-[11px]' : 'text-[11px] sm:text-xs'
-                      } ${
+                      className={`max-w-[72px] text-center text-xs font-semibold leading-tight transition-colors sm:text-sm ${
                         isActive
                           ? 'text-[#D4A843]'
                           : isCompleted
@@ -557,13 +565,13 @@ function StepForm({
                   <FileStack className="h-5 w-5" strokeWidth={1.75} aria-hidden />
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                  <p className="text-sm font-bold uppercase tracking-[0.14em] text-muted-foreground">
                     Documents on this step
                   </p>
                   <p className="mt-0.5 text-sm font-semibold text-foreground">
                     Upload progress
                     {uploadActivityCount > 0 ? (
-                      <span className="ml-2 text-xs font-medium text-[#b98a22]">(upload in progress)</span>
+                      <span className="ml-2 text-sm font-medium text-[#b98a22]">(upload in progress)</span>
                     ) : null}
                   </p>
                 </div>
@@ -617,7 +625,7 @@ function StepForm({
                     <p className="text-sm font-semibold tracking-tight text-foreground [font-family:'DM_Serif_Display',serif] sm:text-base">
                       Ready to submit
                     </p>
-                    <p className="mt-1 text-xs leading-snug text-muted-foreground sm:text-sm">
+                    <p className="mt-1 text-sm leading-snug text-muted-foreground sm:text-base">
                       Review each block below, then confirm the declaration.
                     </p>
                   </div>
@@ -690,7 +698,7 @@ function StepForm({
                                 {field.type === 'repeatable' ? (
                                   <div className="space-y-2 px-5 py-3 sm:px-7">
                                     {showRepeatableInlineTitle ? (
-                                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                      <p className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                                         {repeatableLabel}
                                       </p>
                                     ) : null}
@@ -700,7 +708,7 @@ function StepForm({
                                           key={`${field.name}-row-${rowIndex}`}
                                           className="rounded-lg border border-border bg-muted/40 px-3 py-2.5"
                                         >
-                                          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#b98a22]">
+                                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#b98a22]">
                                             {field.itemBadge ?? 'Item'} {rowIndex + 1}
                                           </p>
                                           <div className="mt-2 space-y-0">
@@ -711,7 +719,7 @@ function StepForm({
                                                   subIdx > 0 ? 'border-t border-[#0A1628]/[0.06]' : ''
                                                 }`}
                                               >
-                                                <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                                                <p className="text-sm font-medium uppercase tracking-[0.06em] text-muted-foreground">
                                                   {String(sub.label ?? sub.name)}
                                                 </p>
                                                 <p className="text-sm leading-relaxed text-foreground">
@@ -728,12 +736,25 @@ function StepForm({
                                   </div>
                                 ) : (
                                   <div className="grid grid-cols-1 gap-1 px-5 py-2.5 sm:grid-cols-[minmax(0,210px)_minmax(0,1fr)] sm:items-start sm:gap-5 sm:px-7 sm:py-3">
-                                    <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                                    <p className="text-sm font-medium uppercase tracking-[0.08em] text-muted-foreground">
                                       {field.label}
                                     </p>
-                                    <p className="text-sm font-medium leading-snug text-foreground">
-                                      {getSingleFieldDisplayValue(field, values[field.name])}
-                                    </p>
+                                    {field.type === 'file' &&
+                                    typeof values[field.name] === 'string' &&
+                                    values[field.name].startsWith('data:image/') ? (
+                                      <div className="space-y-1.5">
+                                        <p className="text-sm text-muted-foreground">Uploaded signature</p>
+                                        <img
+                                          src={values[field.name]}
+                                          alt=""
+                                          className="max-h-24 max-w-[240px] rounded-lg border border-border bg-card object-contain"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm font-medium leading-snug text-foreground">
+                                        {getSingleFieldDisplayValue(field, values[field.name])}
+                                      </p>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -810,7 +831,7 @@ function StepForm({
             <h4 className="text-xl text-foreground [font-family:'DM_Serif_Display',serif]">
               Review Complete
             </h4>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-2 text-base text-muted-foreground">
               Your application details are saved. Click submit to complete your application.
             </p>
           </div>

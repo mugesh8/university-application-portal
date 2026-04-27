@@ -51,9 +51,10 @@ export const optionalDocuments = [
   },
   {
     id: 'professionalTranscripts',
-    name: 'Other Professional Transcripts',
+    name: 'Other professional transcripts / certifications / awards',
     type: 'OPTIONAL',
-    description: 'Transcripts from any additional professional or graduate programs',
+    description:
+      'Transcripts from additional professional or graduate programs, certifications, or awards',
   },
   {
     id: 'englishTest',

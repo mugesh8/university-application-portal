@@ -13,6 +13,9 @@ import {
   notificationItems,
 } from '../data/sidebarModulesContent.js'
 import { usePersistentState } from '../hooks/usePersistentState.js'
+import { getAutofillStudentInfo } from '../utils/studentInfoAutofill.js'
+import { downloadApplicationSummaryPdf } from '../utils/applicationFormPdf.js'
+import { getSingleFieldDisplayValue } from '../utils/submissionDisplay.js'
 import { getSelectValues, isFieldVisible } from '../utils/formVisibility.js'
 
 const crestLogo =
@@ -126,6 +129,63 @@ function ApplicationPage() {
   }, [location.state])
 
   useEffect(() => {
+    setFormValues((prev) => {
+      const m = prev.studentSignatureMethod
+      if (m === 'upload' || m === 'type') {
+        return prev
+      }
+      const hasUpload = prev.studentSignatureUpload && String(prev.studentSignatureUpload).trim()
+      return { ...prev, studentSignatureMethod: hasUpload ? 'upload' : 'type' }
+    })
+  }, [])
+
+  useEffect(() => {
+    // Repair legacy saved value: select can visually show first option
+    // while stored value is invalid and fails validation.
+    setFormValues((prev) => {
+      const englishField = applicationSteps
+        .flatMap((step) => step.fields)
+        .find((field) => field.name === 'englishProficiency')
+      const allowed = getSelectValues(englishField?.options ?? [])
+      const current = String(prev.englishProficiency ?? '').trim()
+      if (allowed.includes(current)) {
+        return prev
+      }
+      return {
+        ...prev,
+        englishProficiency:
+          String(englishField?.defaultValue ?? '').trim() || String(allowed[0] ?? ''),
+      }
+    })
+  }, [])
+
+  useEffect(() => {
+    if (submitted) {
+      return
+    }
+    setFormValues((prev) => {
+      const auto = getAutofillStudentInfo(prev)
+      if (
+        prev.studentName === auto.studentName &&
+        prev.programOfStudy === auto.programOfStudy &&
+        prev.expectedStartDate === auto.expectedStartDate
+      ) {
+        return prev
+      }
+      return { ...prev, ...auto }
+    })
+  }, [
+    submitted,
+    formValues.firstName,
+    formValues.middleName,
+    formValues.surname,
+    formValues.programType,
+    formValues.subProgram,
+    formValues.semester,
+    formValues.year,
+  ])
+
+  useEffect(() => {
     if (submitted) {
       return undefined
     }
@@ -197,7 +257,7 @@ function ApplicationPage() {
       }
     }
 
-    if (field.type === 'select' && field.options?.length > 0) {
+    if ((field.type === 'select' || field.type === 'radioGroup') && field.options?.length > 0) {
       const allowed = getSelectValues(field.options)
       if (!allowed.includes(String(stringValue))) {
         return 'Please select a valid option.'
@@ -227,11 +287,38 @@ function ApplicationPage() {
     return ''
   }
 
+  function validateRepeatableNested(field, rows, valuesToCheck) {
+    const nested = {}
+    const list =
+      Array.isArray(rows) && rows.length > 0
+        ? rows
+        : [typeof field.defaultItem === 'object' && field.defaultItem !== null ? { ...field.defaultItem } : {}]
+    list.forEach((row, rowIndex) => {
+      for (const sub of field.itemFields ?? []) {
+        if (!isFieldVisible(sub, valuesToCheck)) {
+          continue
+        }
+        const message = validateField(sub, row?.[sub.name])
+        if (message) {
+          nested[`${field.name}__${rowIndex}__${sub.name}`] = message
+        }
+      }
+    })
+    return nested
+  }
+
   function validateStep(step, valuesToCheck) {
     const stepErrors = {}
 
     step.fields.forEach((field) => {
       if (!isFieldVisible(field, valuesToCheck)) {
+        return
+      }
+      if (field.type === 'repeatable') {
+        Object.assign(
+          stepErrors,
+          validateRepeatableNested(field, valuesToCheck[field.name], valuesToCheck),
+        )
         return
       }
       const message = validateField(field, valuesToCheck[field.name])
@@ -258,6 +345,13 @@ function ApplicationPage() {
       if (name === 'requiresAccommodation' && value !== 'Yes') {
         next.accommodationDetails = ''
       }
+      if (name === 'studentSignatureMethod') {
+        if (value === 'upload') {
+          next.studentSignatureTyped = ''
+        } else if (value === 'type') {
+          next.studentSignatureUpload = ''
+        }
+      }
       return next
     })
 
@@ -275,11 +369,30 @@ function ApplicationPage() {
       if (name === 'requiresAccommodation') {
         delete nextErrors.accommodationDetails
       }
+      if (name === 'studentSignatureMethod') {
+        delete nextErrors.studentSignatureUpload
+        delete nextErrors.studentSignatureTyped
+      }
 
       const activeField =
         applicationSteps
           .flatMap((step) => step.fields)
           .find((field) => field.name === name) ?? null
+
+      const mergedValues = { ...formValues, [name]: value }
+
+      if (activeField?.type === 'repeatable') {
+        for (const k of Object.keys(nextErrors)) {
+          if (k.startsWith(`${name}__`)) {
+            delete nextErrors[k]
+          }
+        }
+        Object.assign(
+          nextErrors,
+          validateRepeatableNested(activeField, value, mergedValues),
+        )
+        return nextErrors
+      }
 
       if (activeField) {
         const message = validateField(activeField, value)
@@ -404,6 +517,54 @@ function ApplicationPage() {
     setFormValues(initialForm)
     setSubmitted(false)
     setLastSubmissionId('')
+  }
+
+  async function handleDownloadApplicationForm() {
+    const sections = []
+    applicationSteps
+      .filter((step) => step.id !== 'reviewSubmit')
+      .forEach((step) => {
+        const visibleFields = step.fields.filter(
+          (field) =>
+            field.type !== 'note' &&
+            !String(field.name ?? '').startsWith('__') &&
+            isFieldVisible(field, formValues),
+        )
+        if (visibleFields.length === 0) return
+
+        const entries = []
+        visibleFields.forEach((field) => {
+          if (field.type === 'repeatable') {
+            const items = Array.isArray(formValues[field.name]) ? formValues[field.name] : []
+            const itemLines = []
+            if (items.length === 0) {
+              itemLines.push('No entries')
+            } else {
+              items.forEach((row, idx) => {
+                itemLines.push(`${field.itemBadge ?? 'Item'} ${idx + 1}`)
+                ;(field.itemFields ?? []).forEach((sub) => {
+                  itemLines.push(`  ${sub.label ?? sub.name}: ${getSingleFieldDisplayValue(sub, row?.[sub.name])}`)
+                })
+              })
+            }
+            entries.push({
+              label: field.sectionTitle ?? field.label ?? field.name,
+              value: itemLines.join('\n'),
+            })
+          } else {
+            entries.push({
+              label: field.label,
+              value: getSingleFieldDisplayValue(field, formValues[field.name]),
+            })
+          }
+        })
+        sections.push({ title: step.title, entries })
+      })
+
+    await downloadApplicationSummaryPdf({
+      referenceId: lastSubmissionId || 'mucm-application',
+      sections,
+    })
   }
 
   function handleLogout() {
@@ -993,44 +1154,37 @@ function ApplicationPage() {
             </p>
           ) : null}
 
-          <div className="mx-auto mt-8 max-w-xl rounded-xl border border-border bg-card p-5 text-left shadow-lg shadow-[#0A1628]/8">
-            <h3 className="text-base font-bold uppercase tracking-[0.12em] text-[#0A1628]">
-              What Happens Next
+          <div className="mx-auto mt-8 max-w-2xl rounded-xl border border-border bg-card p-5 text-left shadow-lg shadow-[#0A1628]/8 sm:p-6">
+            <h3 className="text-3xl font-semibold tracking-tight text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
+              What Happens Next?
             </h3>
-            <div className="mt-3 space-y-3">
-              <article className="flex items-start gap-3">
-                <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#D4A843]/12 text-[#7a5a14]">
-                  ✉
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-[#0A1628]">Confirmation Email</p>
-                  <p className="text-xs text-[#0A1628]/55">
-                    You will receive a confirmation email with your application reference number.
-                  </p>
-                </div>
-              </article>
-              <article className="flex items-start gap-3">
-                <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#D4A843]/12 text-[#7a5a14]">
-                  📄
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-[#0A1628]">Document Review</p>
-                  <p className="text-xs text-[#0A1628]/55">
-                    Our admissions team will review your submitted documents and may contact you.
-                  </p>
-                </div>
-              </article>
-              <article className="flex items-start gap-3">
-                <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#D4A843]/12 text-[#7a5a14]">
-                  📅
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-[#0A1628]">Admissions Interview</p>
-                  <p className="text-xs text-[#0A1628]/55">
-                    Shortlisted applicants are invited for a virtual interview in 2-3 business days.
-                  </p>
-                </div>
-              </article>
+            <ol className="mt-4 list-decimal space-y-1.5 pl-6 text-lg leading-relaxed text-[#111827]">
+              <li>Your application fee invoice will be sent to your registered email</li>
+              <li>Complete the <strong>application fee payment</strong></li>
+              <li>Our <strong>Admissions Team will review your application</strong></li>
+              <li>Attend an <strong>interview with our Admissions Counselor</strong></li>
+              <li>Submit any pending or missing documents</li>
+              <li>Attend an interview with the Dean of Admissions</li>
+              <li>Receive your official Admission Offer Letter</li>
+              <li><strong>Sign and return</strong> the Admission Offer Letter</li>
+              <li>Your <strong>registration fee invoice</strong> will be shared</li>
+              <li>Complete the <strong>registration fee payment</strong></li>
+              <li>Receive visa guidance and documentation support</li>
+              <li>Apply for your student visa online</li>
+              <li>Your <strong>tuition fee invoice</strong> will be shared</li>
+              <li>Complete your <strong>tuition fee payment</strong></li>
+              <li>Travel to <strong>Antigua</strong></li>
+              <li>Begin your <strong>Doctor of Medicine (MD) journey</strong></li>
+            </ol>
+            <div className="mt-6 border-t border-[#0A1628]/25 pt-5">
+              <h4 className="text-2xl font-semibold tracking-tight text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
+                Optional CTA Section
+              </h4>
+              <ul className="mt-3 list-disc space-y-1 pl-6 text-lg italic text-[#111827]">
+                <li>Check your email for the next steps</li>
+                <li>Our admissions team will contact you shortly</li>
+                <li>[Download Our Brochure]</li>
+              </ul>
             </div>
           </div>
 
@@ -1046,6 +1200,9 @@ function ApplicationPage() {
           </p>
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <PrimaryButton variant="outline" type="button" onClick={handleDownloadApplicationForm}>
+              Download Application Form
+            </PrimaryButton>
             <PrimaryButton
               variant="outline"
               type="button"

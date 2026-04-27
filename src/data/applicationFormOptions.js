@@ -64,6 +64,12 @@ export const programTypeOptions = [
     description:
       'For students entering directly after secondary education or without a prior science degree.',
   },
+  {
+    value: 'transfer-md',
+    label: 'Transfer Doctor of Medicine (MD)',
+    description:
+      'For students with previous medical education who want to seamlessly transition into our MD program. **All transfers to the requested intake are subject to academic review and will require dean\'s approval.**',
+  },
 ]
 
 export const subProgramOptions = [
@@ -91,13 +97,7 @@ export const semesterOptions = ['Spring (January)', 'Summer (May)', 'Fall (Septe
 
 export const intakeYearOptions = ['2026', '2027', '2028', '2029']
 
-export const englishProficiencyOptions = [
-  'Native Speaker',
-  'Fluent',
-  'Advanced',
-  'Intermediate',
-  'Basic',
-]
+export const englishProficiencyOptions = ['Speaking and writing']
 
 export const englishTestTypeOptions = [
   'TOEFL iBT',
@@ -108,7 +108,7 @@ export const englishTestTypeOptions = [
   'Not Applicable',
 ]
 
-export const standardizedTestTypeOptions = ['MCAT', 'UCAT', 'GAMSAT', 'BMAT', 'Not Applicable']
+export const standardizedTestTypeOptions = ['MCAT', 'UCAT', 'GAMSAT', 'BMAT', 'NEET', 'Not Applicable']
 
 export const experienceTypeOptions = [
   'Clinical Experience',

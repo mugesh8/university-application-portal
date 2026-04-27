@@ -8,6 +8,9 @@ export function getSingleFieldDisplayValue(field, rawValue) {
     if (rawValue === undefined || rawValue === null || rawValue === '') {
       return 'Not uploaded'
     }
+    if (typeof rawValue === 'string' && rawValue.startsWith('data:image/')) {
+      return 'Signature image attached'
+    }
     return String(rawValue)
   }
 

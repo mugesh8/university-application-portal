@@ -20,6 +20,9 @@ export function isFieldVisible(field, values) {
     return true
   }
   const { showWhen: w } = field
+  if (w.and) {
+    return w.and.every((c) => matchCondition(c, values))
+  }
   if (w.or) {
     return w.or.some((c) => matchCondition(c, values))
   }

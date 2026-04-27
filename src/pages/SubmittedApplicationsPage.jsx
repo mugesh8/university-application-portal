@@ -96,9 +96,22 @@ function SubmissionAnswers({ formValues }) {
                     <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#0A1628]/45">
                       {field.label}
                     </p>
-                    <p className="text-sm whitespace-pre-wrap text-[#0A1628]/78">
-                      {getSingleFieldDisplayValue(field, formValues[field.name])}
-                    </p>
+                    {field.type === 'file' &&
+                    typeof formValues[field.name] === 'string' &&
+                    formValues[field.name].startsWith('data:image/') ? (
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-[#0A1628]/55">Uploaded signature</p>
+                        <img
+                          src={formValues[field.name]}
+                          alt=""
+                          className="max-h-24 max-w-[240px] rounded-lg border border-[#0A1628]/10 bg-white object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap text-[#0A1628]/78">
+                        {getSingleFieldDisplayValue(field, formValues[field.name])}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

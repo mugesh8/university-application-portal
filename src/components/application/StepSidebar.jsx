@@ -56,7 +56,7 @@ function StepSidebar({ activeModule, onModuleChange }) {
                 </span>
                 <span className="min-w-0">
                   <strong className="block text-sm font-semibold">{module.name}</strong>
-                  <small className="mt-0.5 block text-xs text-white/50">{module.note}</small>
+                  <small className="mt-0.5 block text-sm text-white/50">{module.note}</small>
                 </span>
               </button>
               </li>
@@ -65,7 +65,7 @@ function StepSidebar({ activeModule, onModuleChange }) {
         </ol>
 
         <div className="mt-auto rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur">
-          <p className="text-xs text-white/45">Need help? Contact admissions</p>
+          <p className="text-sm text-white/45">Need help? Contact admissions</p>
           <a
             className="mt-1 inline-block text-sm text-[#D4A843] transition hover:text-[#C5972C]"
             href="mailto:admissions@muantigua.org"

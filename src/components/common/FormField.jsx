@@ -1,10 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, FileStack } from 'lucide-react'
+import { CheckCircle2, Download, FileStack } from 'lucide-react'
 import { countries } from '../../data/countries.js'
 import { formatAcceptLabels } from '../../utils/fileFieldMeta.js'
 import { normalizeSelectOptions } from '../../utils/formVisibility.js'
 import DateInput from './DateInput.jsx'
 import FileDropzone from './FileDropzone.jsx'
+
+function RadioOptionDescription({ text }) {
+  if (!text) return null
+  const segments = text.split(/\*\*/)
+  if (segments.length === 1) {
+    return (
+      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{text}</p>
+    )
+  }
+  return (
+    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+      {segments.map((part, i) =>
+        i % 2 === 1 ? (
+          <strong key={i} className="font-semibold text-[#0A1628]/85">
+            {part}
+          </strong>
+        ) : (
+          part
+        ),
+      )}
+    </p>
+  )
+}
 
 function CountryCombobox({
   field,
@@ -152,7 +175,7 @@ function CountryCombobox({
         ) : null}
       </div>
       {helper ? (
-        <small className="mt-1 block text-xs text-muted-foreground">{helper}</small>
+        <small className="mt-1 block text-sm text-muted-foreground">{helper}</small>
       ) : null}
       {error ? (
         <small className="mt-1 block text-xs font-medium text-destructive">{error}</small>
@@ -265,7 +288,7 @@ function RepeatableBlock({ field, value, onChange, errors, onUploadActivityChang
   )
 }
 
-function FormField({ field, value, onChange, error, onUploadActivityChange }) {
+function FormField({ field, value, onChange, error, onUploadActivityChange, allValues = {} }) {
   const {
     name,
     label,
@@ -295,7 +318,7 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
               isSub
                 ? 'text-sm'
                 : isPlain
-                  ? 'text-xs font-bold uppercase tracking-widest text-[#0A1628]/45'
+                  ? 'text-sm font-bold uppercase tracking-widest text-[#0A1628]/45'
                   : field.reviewBullets
                     ? 'text-base leading-snug'
                     : 'text-lg'
@@ -305,14 +328,45 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
           </h3>
         ) : null}
         {field.noteBody ? (
-          <p className={`text-xs leading-relaxed ${isPlain ? 'text-[#0A1628]/40' : 'text-[#0A1628]/45'}`}>
+          <p className={`text-sm leading-relaxed ${isPlain ? 'text-[#0A1628]/40' : 'text-[#0A1628]/45'}`}>
             {field.noteBody}
           </p>
         ) : null}
         {field.noteCallout ? (
           <div className="rounded-xl border border-blue-200/50 bg-blue-50/70 p-3.5">
-            <p className="text-xs leading-relaxed text-blue-800/70">{field.noteCallout}</p>
+            <p className="text-sm leading-relaxed text-blue-800/70">{field.noteCallout}</p>
           </div>
+        ) : null}
+        {field.downloadLink ? (
+          <p className="mt-2">
+            {field.downloadLink.prefillFromValues ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { downloadPrefilledStep7Pdf } = await import('../../utils/step7SponsorPdf.js')
+                    await downloadPrefilledStep7Pdf(allValues, field.downloadLink)
+                  } catch {
+                    // Fallback to static template if generation fails in browser.
+                    window.open(field.downloadLink.href, '_blank', 'noopener,noreferrer')
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#D4A843]/45 bg-gradient-to-r from-[#D4A843]/12 to-[#D4A843]/5 px-4 py-2.5 text-sm font-semibold text-[#5c4510] shadow-sm transition hover:border-[#D4A843]/70 hover:from-[#D4A843]/18 hover:to-[#D4A843]/8"
+              >
+                <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                {field.downloadLink.label}
+              </button>
+            ) : (
+              <a
+                href={field.downloadLink.href}
+                download={field.downloadLink.fileName ?? ''}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#D4A843]/45 bg-gradient-to-r from-[#D4A843]/12 to-[#D4A843]/5 px-4 py-2.5 text-sm font-semibold text-[#5c4510] shadow-sm transition hover:border-[#D4A843]/70 hover:from-[#D4A843]/18 hover:to-[#D4A843]/8"
+              >
+                <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                {field.downloadLink.label}
+              </a>
+            )}
+          </p>
         ) : null}
         {field.reviewBullets ? (
           <div className="rounded-xl border border-[#D4A843]/25 bg-white/60 p-3 sm:p-4">
@@ -381,9 +435,7 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-[#0A1628]">{opt.label}</p>
-                    {opt.description ? (
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{opt.description}</p>
-                    ) : null}
+                    {opt.description ? <RadioOptionDescription text={opt.description} /> : null}
                   </div>
                 </div>
               </button>
@@ -469,6 +521,10 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
 
   if (type === 'select') {
     const normalized = normalizeSelectOptions(options)
+    const filteredOptions =
+      name === 'subProgram' && allValues.programType === '4year'
+        ? normalized.filter((option) => option.value !== 'premedical')
+        : normalized
     return (
       <label>
         <span className={labelClasses}>
@@ -480,15 +536,17 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
           required={required}
           onChange={(event) => onChange(name, event.target.value)}
         >
-          <option value="">{placeholder ?? 'Select an option'}</option>
-          {normalized.map((option) => (
+          <option value="" disabled hidden>
+            {placeholder ?? 'Select an option'}
+          </option>
+          {filteredOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
         {helper ? (
-          <small className="mt-1 block text-xs text-muted-foreground">{helper}</small>
+          <small className="mt-1 block text-sm text-muted-foreground">{helper}</small>
         ) : null}
         {error ? (
           <small className="mt-1 block text-xs font-medium text-destructive">{error}</small>
@@ -514,6 +572,8 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
           helperText={helper}
           onChange={(next) => onChange(name, next)}
           onUploadActivityChange={onUploadActivityChange}
+          storeAsDataUrl={Boolean(field.storeAsDataUrl)}
+          compact={Boolean(field.compact)}
         />
       </div>
     )
@@ -546,7 +606,7 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
           onChange={(event) => onChange(name, event.target.value)}
         />
         {helper ? (
-          <small className="mt-1 block text-xs text-muted-foreground">{helper}</small>
+          <small className="mt-1 block text-sm text-muted-foreground">{helper}</small>
         ) : null}
         {error ? (
           <small className="mt-1 block text-xs font-medium text-destructive">{error}</small>
@@ -570,7 +630,89 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
           aria-invalid={error ? 'true' : undefined}
         />
         {helper ? (
-          <small className="mt-1 block text-xs text-muted-foreground">{helper}</small>
+          <small className="mt-1 block text-sm text-muted-foreground">{helper}</small>
+        ) : null}
+        {error ? (
+          <small className="mt-1 block text-xs font-medium text-destructive">{error}</small>
+        ) : null}
+      </label>
+    )
+  }
+
+  if (type === 'text' && field.signaturePreview) {
+    const compact = Boolean(field.signaturePreviewCompact)
+    const preview = value != null && String(value).trim() !== '' ? String(value).trim() : ''
+    return (
+      <label className="block">
+        <span className={`${labelClasses} ${compact ? 'text-sm' : ''}`}>
+          {label} {required ? <span className="text-red-500">*</span> : null}
+        </span>
+        <input
+          className={`${inputClasses} ${compact ? 'mt-1.5 h-9 text-sm' : ''} ${error ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+          type="text"
+          value={value ?? ''}
+          required={required}
+          placeholder={placeholder}
+          autoComplete="off"
+          onChange={(event) => onChange(name, event.target.value)}
+        />
+        <div
+          className={`flex flex-col justify-center rounded-lg border border-[#0A1628]/12 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(10,22,40,0.05)] ${
+            compact ? 'mt-2 min-h-[3.25rem] px-3 py-2 sm:px-3.5' : 'mt-3 min-h-[4.75rem] rounded-xl px-4 py-3 shadow-[0_1px_3px_rgba(10,22,40,0.06)] sm:px-5'
+          }`}
+          aria-hidden
+        >
+          <p
+            className={`font-bold uppercase tracking-[0.14em] text-[#0A1628]/40 ${compact ? 'text-[10px]' : 'text-xs'}`}
+          >
+            Signature preview
+          </p>
+          <p
+            className={`origin-left -rotate-[1.25deg] break-words leading-none text-[#0c1220] antialiased [font-synthesis:none] ${
+              compact
+                ? 'mt-1 min-h-[2rem] text-[clamp(1.35rem,3.5vw,1.85rem)]'
+                : 'mt-2 min-h-[2.85rem] text-[clamp(2rem,5vw,3.25rem)]'
+            }`}
+            style={{
+              fontFamily: "'Mr Dafoe', 'Segoe Script', 'Brush Script MT', cursive",
+            }}
+          >
+            {preview || '—'}
+          </p>
+        </div>
+        {helper ? (
+          <small className="mt-1 block text-sm text-muted-foreground">{helper}</small>
+        ) : null}
+        {error ? (
+          <small className="mt-1 block text-xs font-medium text-destructive">{error}</small>
+        ) : null}
+      </label>
+    )
+  }
+
+  if (field.readOnly && type === 'text') {
+    const display =
+      value !== undefined && value !== null && String(value).trim() !== '' ? String(value) : null
+    return (
+      <label>
+        <span className={labelClasses}>
+          {label} {required ? <span className="text-red-500">*</span> : null}
+        </span>
+        <div
+          className={`mt-2 min-h-10 w-full max-w-full whitespace-pre-wrap break-words rounded-md border border-input bg-muted/60 px-3 py-2 text-sm leading-relaxed text-foreground shadow-sm ${
+            error ? 'border-destructive ring-1 ring-destructive/30' : ''
+          }`}
+          tabIndex={0}
+          aria-readonly="true"
+        >
+          {display ? (
+            display
+          ) : (
+            <span className="text-muted-foreground">{placeholder ?? '—'}</span>
+          )}
+        </div>
+        {helper ? (
+          <small className="mt-1 block text-sm text-muted-foreground">{helper}</small>
         ) : null}
         {error ? (
           <small className="mt-1 block text-xs font-medium text-destructive">{error}</small>
@@ -593,7 +735,7 @@ function FormField({ field, value, onChange, error, onUploadActivityChange }) {
         onChange={(event) => onChange(name, event.target.value)}
       />
       {helper ? (
-        <small className="mt-1 block text-xs text-muted-foreground">{helper}</small>
+        <small className="mt-1 block text-sm text-muted-foreground">{helper}</small>
       ) : null}
       {error ? (
         <small className="mt-1 block text-xs font-medium text-destructive">{error}</small>
