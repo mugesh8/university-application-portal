@@ -144,7 +144,8 @@ function SubmittedApplicationsPage() {
     }
   }, [userEmail])
 
-  const [expandedId, setExpandedId] = useState(submissions[0]?.id ?? '')
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState(submissions[0]?.id ?? '')
+  const selectedSubmission = submissions.find((item) => item.id === selectedSubmissionId) ?? submissions[0] ?? null
 
   function handleModuleChange(moduleName) {
     setActiveModule(moduleName)
@@ -224,112 +225,107 @@ function SubmittedApplicationsPage() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {submissions.map((submission) => {
-                  const uploadedCount = submission.documents.filter((doc) => doc.value).length
-                  const requiredCount = submission.documents.filter((doc) => doc.required).length
-                  const requiredUploaded = submission.documents.filter((doc) => doc.required && doc.value).length
-                  const isExpanded = expandedId === submission.id
+              <div className="grid grid-cols-1 gap-3 lg:h-[calc(100dvh-8rem)] lg:grid-cols-[320px_minmax(0,1fr)]">
+                <aside className="rounded-2xl border border-border bg-card p-3 shadow-sm lg:sticky lg:top-6 lg:h-fit">
+                  <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/45">
+                    Submitted IDs
+                  </p>
+                  <div className="space-y-1.5">
+                    {submissions.map((submission) => {
+                      const isSelected = selectedSubmission?.id === submission.id
+                      return (
+                        <button
+                          key={submission.id}
+                          type="button"
+                          onClick={() => setSelectedSubmissionId(submission.id)}
+                          className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                            isSelected
+                              ? 'border-[#D4A843]/65 bg-[#fff8e8] text-[#0A1628]'
+                              : 'border-border bg-white text-[#0A1628]/70 hover:border-[#D4A843]/35 hover:bg-[#F8F7F4]'
+                          }`}
+                        >
+                          <p className="font-semibold">{submission.id}</p>
+                          <p className="mt-0.5 text-xs text-[#0A1628]/45">
+                            {new Date(submission.submittedAt).toLocaleString()}
+                          </p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </aside>
 
-                  return (
-                    <article
-                      key={submission.id}
-                      className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
-                    >
-                      <button
-                        type="button"
-                        className="w-full px-6 py-3 text-left transition hover:bg-[#F8F7F4] sm:px-8"
-                        onClick={() => setExpandedId((prev) => (prev === submission.id ? '' : submission.id))}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/45">
-                              {new Date(submission.submittedAt).toLocaleString()}
-                            </p>
-                            <h3 className="text-lg text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
-                              {submission.applicantName}
-                            </h3>
-                            <p className="text-xs text-[#0A1628]/55">Reference: {submission.id}</p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <span className="rounded-full bg-[#0A1628]/6 px-2.5 py-1 text-xs font-semibold text-[#0A1628]/65">
-                              Docs: {uploadedCount}/{submission.documents.length}
-                            </span>
-                            <span className="rounded-full bg-[#D4A843]/15 px-2.5 py-1 text-xs font-semibold text-[#7a5a14]">
-                              Required: {requiredUploaded}/{requiredCount}
-                            </span>
-                          </div>
+                {selectedSubmission ? (
+                  <article className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm lg:h-full">
+                    <div className="border-b border-[#0A1628]/8 bg-[#F8F7F4] px-6 py-3 sm:px-8">
+                      <h3 className="text-lg text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
+                        Submission {selectedSubmission.id}
+                      </h3>
+                    </div>
+                    <div className="bg-[#F8F7F4] px-6 py-4 sm:px-8 lg:h-[calc(100%-2.9rem)] lg:overflow-y-auto">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="rounded-xl border border-border bg-card p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
+                            Applicant Details
+                          </p>
+                          <p className="mt-1 text-sm text-[#0A1628]/75">
+                            Name: {selectedSubmission.applicantName}
+                          </p>
+                          <p className="text-sm text-[#0A1628]/75">
+                            Email: {selectedSubmission.formValues?.email || 'Not provided'}
+                          </p>
+                          <p className="text-sm text-[#0A1628]/75">
+                            Phone: {selectedSubmission.formValues?.phoneMobile || 'Not provided'}
+                          </p>
                         </div>
-                      </button>
-
-                      {isExpanded ? (
-                        <div className="border-t border-[#0A1628]/8 bg-[#F8F7F4] px-6 py-4 sm:px-8">
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <div className="rounded-xl border border-border bg-card p-3">
-                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
-                                Applicant Details
-                              </p>
-                              <p className="mt-1 text-sm text-[#0A1628]/75">
-                                Name: {submission.applicantName}
-                              </p>
-                              <p className="text-sm text-[#0A1628]/75">
-                                Email: {submission.formValues?.email || 'Not provided'}
-                              </p>
-                              <p className="text-sm text-[#0A1628]/75">
-                                Phone: {submission.formValues?.phoneMobile || 'Not provided'}
-                              </p>
-                            </div>
-                            <div className="rounded-xl border border-border bg-card p-3">
-                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
-                                Application Meta
-                              </p>
-                              <p className="mt-1 text-sm text-[#0A1628]/75">
-                                Submitted by: {submission.userEmail}
-                              </p>
-                              <p className="text-sm text-[#0A1628]/75">
-                                Submission ID: {submission.id}
-                              </p>
-                            </div>
-                          </div>
-
-                          <SubmissionAnswers formValues={submission.formValues} />
-
-                          <div className="mt-3 rounded-xl border border-border bg-card p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
-                              Documents
-                            </p>
-                            <div className="mt-2 space-y-2">
-                              {submission.documents.map((doc) => (
-                                <div
-                                  key={`${submission.id}-${doc.name}`}
-                                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#0A1628]/8 bg-[#F8F7F4] px-3 py-2"
-                                >
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium text-[#0A1628]/80">{doc.label}</p>
-                                    <p className="text-xs text-[#0A1628]/50">
-                                      {doc.value ? doc.value : 'Not uploaded'}
-                                    </p>
-                                  </div>
-                                  <span
-                                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                      doc.value
-                                        ? 'bg-green-100 text-green-700'
-                                        : doc.required
-                                          ? 'bg-red-100 text-red-700'
-                                          : 'bg-slate-100 text-slate-600'
-                                    }`}
-                                  >
-                                    {doc.value ? 'Uploaded' : doc.required ? 'Required Missing' : 'Optional'}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                        <div className="rounded-xl border border-border bg-card p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
+                            Application Meta
+                          </p>
+                          <p className="mt-1 text-sm text-[#0A1628]/75">
+                            Submitted by: {selectedSubmission.userEmail}
+                          </p>
+                          <p className="text-sm text-[#0A1628]/75">
+                            Submission ID: {selectedSubmission.id}
+                          </p>
                         </div>
-                      ) : null}
-                    </article>
-                  )
-                })}
+                      </div>
+
+                      <SubmissionAnswers formValues={selectedSubmission.formValues} />
+
+                      <div className="mt-3 rounded-xl border border-border bg-card p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
+                          Documents
+                        </p>
+                        <div className="mt-2 space-y-2">
+                          {selectedSubmission.documents.map((doc) => (
+                            <div
+                              key={`${selectedSubmission.id}-${doc.name}`}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#0A1628]/8 bg-[#F8F7F4] px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-[#0A1628]/80">{doc.label}</p>
+                                <p className="text-xs text-[#0A1628]/50">
+                                  {doc.value ? doc.value : 'Not uploaded'}
+                                </p>
+                              </div>
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  doc.value
+                                    ? 'bg-green-100 text-green-700'
+                                    : doc.required
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {doc.value ? 'Uploaded' : doc.required ? 'Required Missing' : 'Optional'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                ) : null}
               </div>
             )}
           </div>

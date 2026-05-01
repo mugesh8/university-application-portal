@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import ApplicationPage from '../pages/ApplicationPage.jsx'
 import BeforeYouBeginPage from '../pages/BeforeYouBeginPage.jsx'
@@ -6,26 +7,79 @@ import ProfilePage from '../pages/ProfilePage.jsx'
 import SettingsPage from '../pages/SettingsPage.jsx'
 import SubmittedApplicationsPage from '../pages/SubmittedApplicationsPage.jsx'
 import { usePersistentState } from '../hooks/usePersistentState.js'
-
-const DEMO_EMAIL = 'demo@mucm.edu'
-const DEMO_OTP = '123456'
+import { apiUrl } from '../config/baseUrl.js'
 
 function AppRouter() {
   const [authSession, setAuthSession] = usePersistentState('mucm-auth-session', {
     isAuthenticated: false,
     email: '',
+    token: '',
   })
+  const authPrefixRef = useRef(import.meta.env.VITE_AUTH_PREFIX || '/api/auth')
 
-  function handleLogin(email, otp) {
-    const normalizedEmail = email.trim().toLowerCase()
-    const normalizedOtp = otp.trim()
+  function getAuthPaths(endpoint) {
+    const preferredPrefix = authPrefixRef.current || '/api/auth'
+    const candidates = [preferredPrefix, '/api/auth', '/auth', '']
+    const uniquePrefixes = [...new Set(candidates)]
+    return uniquePrefixes.map((prefix) =>
+      prefix ? `${prefix}/${endpoint}`.replace(/\/+/g, '/') : `/${endpoint}`,
+    )
+  }
 
-    if (normalizedEmail === DEMO_EMAIL && normalizedOtp === DEMO_OTP) {
-      setAuthSession({ isAuthenticated: true, email: normalizedEmail })
-      return true
+  async function postAuthEndpoint(endpoint, body, fallbackErrorMessage) {
+    let lastError = null
+
+    for (const path of getAuthPaths(endpoint)) {
+      let response
+      let payload = {}
+      try {
+        response = await fetch(apiUrl(path), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        payload = await response.json().catch(() => ({}))
+      } catch {
+        throw new Error(
+          'API server is unreachable. Start your backend server and verify VITE_API_BASE_URL in .env.',
+        )
+      }
+
+      if (response.ok && payload.success !== false) {
+        authPrefixRef.current = path.slice(0, -(`/${endpoint}`.length)) || ''
+        return payload
+      }
+
+      // Keep trying alternative mount paths when the endpoint is not found.
+      if (response.status === 404) {
+        lastError = new Error(payload.message || fallbackErrorMessage)
+        continue
+      }
+
+      throw new Error(payload.message || fallbackErrorMessage)
     }
 
-    return false
+    throw lastError || new Error(fallbackErrorMessage)
+  }
+
+  async function handleRequestOtp(email) {
+    await postAuthEndpoint(
+      'request-otp',
+      { email: email.trim().toLowerCase() },
+      'Failed to send OTP. Please try again.',
+    )
+  }
+
+  async function handleLogin(email, otp) {
+    const normalizedEmail = email.trim().toLowerCase()
+    const payload = await postAuthEndpoint(
+      'verify-otp',
+      { email: normalizedEmail, otp: otp.trim() },
+      'Invalid OTP. Please try again.',
+    )
+
+    const token = payload.token || payload.data?.token || payload.accessToken || ''
+    setAuthSession({ isAuthenticated: true, email: normalizedEmail, token })
   }
 
   return (
@@ -37,9 +91,8 @@ function AppRouter() {
             <Navigate to="/before-you-begin" replace />
           ) : (
             <LoginPage
+              onRequestOtp={handleRequestOtp}
               onLogin={handleLogin}
-              demoEmail={DEMO_EMAIL}
-              demoOtp={DEMO_OTP}
             />
           )
         }
@@ -48,9 +101,8 @@ function AppRouter() {
         path="/login"
         element={
           <LoginPage
+            onRequestOtp={handleRequestOtp}
             onLogin={handleLogin}
-            demoEmail={DEMO_EMAIL}
-            demoOtp={DEMO_OTP}
           />
         }
       />

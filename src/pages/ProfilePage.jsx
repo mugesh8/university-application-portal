@@ -14,6 +14,15 @@ function getInitials(email) {
   return local.slice(0, 2).toUpperCase()
 }
 
+function sanitizePhoneInput(raw) {
+  const value = String(raw ?? '')
+  const cleaned = value.replace(/[^\d+\s()-]/g, '')
+  const plusNormalized = cleaned.replace(/\+/g, '')
+  return cleaned.trimStart().startsWith('+')
+    ? `+${plusNormalized}`
+    : plusNormalized
+}
+
 function ProfilePage() {
   const navigate = useNavigate()
   const userEmail = (() => {
@@ -34,7 +43,11 @@ function ProfilePage() {
   const [saved, setSaved] = useState(false)
 
   function handleChange(e) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value, type } = e.target
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === 'tel' ? sanitizePhoneInput(value) : value,
+    }))
     setSaved(false)
   }
 
@@ -122,6 +135,7 @@ function ProfilePage() {
                     name={field.name}
                     value={form[field.name]}
                     onChange={handleChange}
+                    inputMode={field.type === 'tel' ? 'numeric' : undefined}
                     placeholder={field.placeholder}
                     className="mt-2 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   />

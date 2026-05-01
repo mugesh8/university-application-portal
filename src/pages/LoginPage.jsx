@@ -5,29 +5,50 @@ import PrimaryButton from '../components/common/PrimaryButton.jsx'
 const crestLogo =
   'https://d2xsxph8kpxj0f.cloudfront.net/310519663394975842/o5YxQXzG37vUfAnZtRoyQg/mucm-crest-logo_aac17a92.png'
 
-function LoginPage({ onLogin, demoEmail, demoOtp }) {
+function LoginPage({ onRequestOtp, onLogin }) {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
+  const [isRequestingOtp, setIsRequestingOtp] = useState(false)
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
-    const isValid = onLogin(email, otp)
+    setError('')
+    setInfo('')
+    setIsVerifyingOtp(true)
 
-    if (!isValid) {
-      setError('Invalid demo credentials. Please use the demo email and OTP.')
+    try {
+      await onLogin(email, otp)
+      navigate('/before-you-begin')
+    } catch (submissionError) {
+      setError(submissionError.message || 'Unable to login. Please try again.')
+    } finally {
+      setIsVerifyingOtp(false)
+    }
+  }
+
+  async function handleRequestOtp() {
+    if (!email.trim()) {
+      setError('Please enter your email before requesting OTP.')
+      setInfo('')
       return
     }
 
     setError('')
-    navigate('/before-you-begin')
-  }
+    setInfo('')
+    setIsRequestingOtp(true)
 
-  function fillDemoCredentials() {
-    setEmail(demoEmail)
-    setOtp(demoOtp)
-    setError('')
+    try {
+      await onRequestOtp(email)
+      setInfo('OTP sent to your email. Please check your inbox and spam folder.')
+    } catch (otpError) {
+      setError(otpError.message || 'Unable to send OTP. Please try again.')
+    } finally {
+      setIsRequestingOtp(false)
+    }
   }
 
   return (
@@ -68,10 +89,11 @@ function LoginPage({ onLogin, demoEmail, demoOtp }) {
 
             <div className="mt-auto rounded-2xl border border-white/15 bg-white/5 p-4 backdrop-blur">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-                Demo credentials
+                One-time password login
               </p>
-              <p className="mt-2 text-sm text-white/85">Email: {demoEmail}</p>
-              <p className="text-sm text-white/85">OTP: {demoOtp}</p>
+              <p className="mt-2 text-sm text-white/85">
+                Request an OTP and use the code sent to your email.
+              </p>
             </div>
           </div>
         </aside>
@@ -107,12 +129,6 @@ function LoginPage({ onLogin, demoEmail, demoOtp }) {
             </p>
           </div>
 
-          <div className="mb-5 rounded-xl border border-[#D4A843]/35 bg-[#fff9ea] p-3 text-sm text-[#0A1628]/80 lg:hidden">
-            <p className="font-semibold text-[#0A1628]">Demo credentials</p>
-            <p>Email: {demoEmail}</p>
-            <p>OTP: {demoOtp}</p>
-          </div>
-
           <form className="space-y-4" onSubmit={handleSubmit}>
             <label className="block">
               <span className="text-sm font-semibold text-[#0A1628]/85">Email</span>
@@ -126,6 +142,15 @@ function LoginPage({ onLogin, demoEmail, demoOtp }) {
               />
             </label>
 
+            <button
+              type="button"
+              onClick={handleRequestOtp}
+              disabled={isRequestingOtp || isVerifyingOtp}
+              className="w-full rounded-xl border border-[#0A1628]/12 bg-white px-4 py-2.5 text-sm font-semibold text-[#0A1628]/75 transition hover:border-[#D4A843]/50 hover:bg-[#fff8e8] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isRequestingOtp ? 'Sending OTP...' : 'Send OTP'}
+            </button>
+
             <label className="block">
               <span className="text-sm font-semibold text-[#0A1628]/85">OTP</span>
               <input
@@ -138,6 +163,12 @@ function LoginPage({ onLogin, demoEmail, demoOtp }) {
               />
             </label>
 
+            {info ? (
+              <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                {info}
+              </p>
+            ) : null}
+
             {error ? (
               <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 {error}
@@ -145,14 +176,9 @@ function LoginPage({ onLogin, demoEmail, demoOtp }) {
             ) : null}
 
             <div className="flex flex-col gap-2 pt-1">
-              <PrimaryButton type="submit">Login</PrimaryButton>
-              <button
-                type="button"
-                onClick={fillDemoCredentials}
-                className="rounded-xl border border-[#0A1628]/12 bg-white px-4 py-2.5 text-sm font-semibold text-[#0A1628]/75 transition hover:border-[#D4A843]/50 hover:bg-[#fff8e8]"
-              >
-                Use Demo Credentials
-              </button>
+              <PrimaryButton type="submit" disabled={isVerifyingOtp || isRequestingOtp}>
+                {isVerifyingOtp ? 'Verifying...' : 'Login'}
+              </PrimaryButton>
             </div>
           </form>
         </div>

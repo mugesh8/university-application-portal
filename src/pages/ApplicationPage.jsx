@@ -4,6 +4,8 @@ import StepForm from '../components/application/StepForm.jsx'
 import StepSidebar from '../components/application/StepSidebar.jsx'
 import PrimaryButton from '../components/common/PrimaryButton.jsx'
 import ProfileDropdown from '../components/common/ProfileDropdown.jsx'
+import { fetchPublishedFaqs } from '../api/faqApi.js'
+import { apiUrl } from '../config/baseUrl.js'
 import { applicationSteps } from '../data/applicationSteps.js'
 import { countries } from '../data/countries.js'
 import {
@@ -22,6 +24,8 @@ const crestLogo =
   'https://d2xsxph8kpxj0f.cloudfront.net/310519663394975842/o5YxQXzG37vUfAnZtRoyQg/mucm-crest-logo_aac17a92.png'
 const SUBMISSIONS_KEY = 'mucm-submitted-applications'
 const SUPPORT_TICKETS_KEY = 'mucm-support-tickets'
+const ACTIVE_APPLICATION_KEY = 'mucm-active-application'
+const SUBMIT_COOLDOWN_DAYS = Number(import.meta.env.VITE_APPLICATION_RESUBMIT_COOLDOWN_DAYS) || 30
 
 function getSupportTicketStatusStyles(status) {
   switch (status) {
@@ -103,6 +107,625 @@ function ApplicationPage() {
     'faq',
   )
   const [lastSubmissionId, setLastSubmissionId] = useState('')
+  const [submittedSnapshot, setSubmittedSnapshot] = useState(null)
+  const [faqApiSections, setFaqApiSections] = useState([])
+  const [faqLoading, setFaqLoading] = useState(false)
+  const [faqError, setFaqError] = useState('')
+  const [cooldownNotice, setCooldownNotice] = useState({
+    isBlocked: false,
+    nextAllowedAt: null,
+    open: false,
+  })
+  const [activeApplication, setActiveApplication] = usePersistentState(
+    ACTIVE_APPLICATION_KEY,
+    {
+      id: '',
+      applicationId: '',
+    },
+  )
+  const applicationsPrefixRef = useRef(import.meta.env.VITE_APPLICATIONS_PREFIX || '/api/v1/applications')
+
+  function getAuthHeader() {
+    try {
+      const token = JSON.parse(window.localStorage.getItem('mucm-auth-session') ?? '{}')?.token
+      if (token && String(token).trim()) {
+        return { Authorization: `Bearer ${token}` }
+      }
+    } catch {
+      // ignore malformed local storage
+    }
+    return {}
+  }
+
+  function buildApplicationsPaths() {
+    const preferredPrefix = applicationsPrefixRef.current || '/api/v1/applications'
+    const candidates = [
+      preferredPrefix,
+      '/api/v1/applications',
+      '/api/applications',
+      '/applications',
+      '/application',
+    ]
+    const uniquePrefixes = [...new Set(candidates)]
+    return uniquePrefixes.map((prefix) => prefix.replace(/\/+$/, '') || '/applications')
+  }
+
+  async function postOrPutApplication(path, method, payload) {
+    let lastError = null
+
+    for (const basePath of buildApplicationsPaths()) {
+      const endpoint = `${basePath}${path}`
+      let response
+      let data = {}
+
+      try {
+        response = await fetch(apiUrl(endpoint), {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeader(),
+          },
+          body: JSON.stringify(payload),
+        })
+        data = await response.json().catch(() => ({}))
+      } catch {
+        throw new Error('API server is unreachable. Please verify backend server and API base URL.')
+      }
+
+      if (response.ok && data.success !== false) {
+        applicationsPrefixRef.current = basePath
+        return data
+      }
+
+      if (response.status === 404) {
+        lastError = new Error(data.message || 'Application endpoint not found.')
+        continue
+      }
+
+      throw new Error(data.message || 'Failed to save application.')
+    }
+
+    throw lastError || new Error('Application endpoint not found.')
+  }
+
+  async function fetchApplicationByApplicationId(applicationId) {
+    let lastError = null
+    const safeApplicationId = encodeURIComponent(String(applicationId || '').trim())
+    if (!safeApplicationId) {
+      return null
+    }
+
+    for (const basePath of buildApplicationsPaths()) {
+      const endpoint = `${basePath}/by-application-id/${safeApplicationId}`
+      let response
+      let data = {}
+
+      try {
+        response = await fetch(apiUrl(endpoint), {
+          headers: {
+            ...getAuthHeader(),
+          },
+        })
+        data = await response.json().catch(() => ({}))
+      } catch {
+        throw new Error('API server is unreachable. Please verify backend server and API base URL.')
+      }
+
+      if (response.ok && data.success !== false) {
+        applicationsPrefixRef.current = basePath
+        return data.data || data.application || data
+      }
+
+      if (response.status === 404) {
+        lastError = new Error(data.message || 'Application not found.')
+        continue
+      }
+
+      throw new Error(data.message || 'Failed to fetch application.')
+    }
+
+    if (lastError) {
+      return null
+    }
+    return null
+  }
+
+  function normalizeText(value) {
+    if (value === undefined || value === null) return null
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      return trimmed === '' ? null : trimmed
+    }
+    return value
+  }
+
+  function yesNoToBoolean(value) {
+    if (value === 'Yes') return true
+    if (value === 'No') return false
+    return null
+  }
+
+  function monthToDateOnly(value) {
+    const normalized = normalizeText(value)
+    if (!normalized) return null
+    return /^\d{4}-\d{2}$/.test(String(normalized)) ? `${normalized}-01` : normalized
+  }
+
+  function hasAnyValue(obj) {
+    return Object.values(obj).some((value) => {
+      if (value === undefined || value === null) return false
+      if (typeof value === 'string') return value.trim() !== ''
+      if (Array.isArray(value)) return value.length > 0
+      if (typeof value === 'object') return Object.keys(value).length > 0
+      return true
+    })
+  }
+
+  function valuesEquivalent(a, b) {
+    if (a === undefined || a === null || a === '') return b === undefined || b === null || b === ''
+    if (b === undefined || b === null || b === '') return false
+    if (typeof a === 'boolean' || typeof b === 'boolean') return Boolean(a) === Boolean(b)
+    return String(a).trim() === String(b).trim()
+  }
+
+  function rowMatchesPayload(payload, row) {
+    if (!row || typeof row !== 'object') return false
+    return Object.entries(payload).every(([key, value]) => valuesEquivalent(value, row[key]))
+  }
+
+  async function requestApplicationApi(method, path, payload) {
+    let lastError = null
+
+    for (const basePath of buildApplicationsPaths()) {
+      const endpoint = `${basePath}${path}`
+      let response
+      let data = {}
+      try {
+        response = await fetch(apiUrl(endpoint), {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeader(),
+          },
+          body: payload === undefined ? undefined : JSON.stringify(payload),
+        })
+        data = await response.json().catch(() => ({}))
+      } catch {
+        throw new Error('API server is unreachable. Please verify backend server and API base URL.')
+      }
+
+      if (response.ok && data.success !== false) {
+        applicationsPrefixRef.current = basePath
+        return data
+      }
+      if (response.status === 404) {
+        lastError = new Error(data.message || 'Application endpoint not found.')
+        continue
+      }
+      throw new Error(data.message || `Failed API request for ${path}`)
+    }
+    throw lastError || new Error('Application endpoint not found.')
+  }
+
+  async function fetchApplicationFullById(applicationRowId) {
+    const data = await requestApplicationApi('GET', `/${applicationRowId}?full=true`)
+    return data.data || {}
+  }
+
+  async function upsertSingletonSection(applicationRowId, pathSegment, payload, existingRow) {
+    const rowId = existingRow?.id
+    if (rowId) {
+      await requestApplicationApi('PUT', `/${applicationRowId}/${pathSegment}/${rowId}`, payload)
+      return
+    }
+    if (!hasAnyValue(payload)) {
+      return
+    }
+    await requestApplicationApi('POST', `/${applicationRowId}/${pathSegment}`, payload)
+  }
+
+  async function upsertListSection(applicationRowId, pathSegment, items, existingRows = [], options = {}) {
+    const createOnly = Boolean(options.createOnly)
+    const list = Array.isArray(items) ? items : []
+    const existing = Array.isArray(existingRows) ? existingRows : []
+
+    for (let index = 0; index < list.length; index += 1) {
+      const payload = list[index]
+      const existingRow = existing[index]
+      if (createOnly) {
+        if (!hasAnyValue(payload)) {
+          continue
+        }
+        if (rowMatchesPayload(payload, existingRow)) {
+          continue
+        }
+        await requestApplicationApi('POST', `/${applicationRowId}/${pathSegment}`, payload)
+        continue
+      }
+      if (existingRow?.id) {
+        await requestApplicationApi('PUT', `/${applicationRowId}/${pathSegment}/${existingRow.id}`, payload)
+      } else if (hasAnyValue(payload)) {
+        await requestApplicationApi('POST', `/${applicationRowId}/${pathSegment}`, payload)
+      }
+    }
+
+    if (createOnly) {
+      return
+    }
+
+    for (let index = list.length; index < existing.length; index += 1) {
+      const rowToDelete = existing[index]
+      if (rowToDelete?.id) {
+        await requestApplicationApi('DELETE', `/${applicationRowId}/${pathSegment}/${rowToDelete.id}`)
+      }
+    }
+  }
+
+  function buildSectionPayloads() {
+    const emergencyPayload = {
+      full_name: normalizeText(formValues.contactName),
+      relationship: normalizeText(formValues.relationship),
+      phone: normalizeText(formValues.contactPhone),
+      email: normalizeText(formValues.contactEmail),
+      country: normalizeText(formValues.contactCountry),
+      home_address: normalizeText(formValues.contactAddress),
+    }
+
+    const academicInstitutionRows = (Array.isArray(formValues.educationEntries) ? formValues.educationEntries : [])
+      .filter((row) => hasAnyValue(row || {}))
+      .map((row) => ({
+        institution_details: {
+          institution: normalizeText(row?.institution),
+          address: normalizeText(row?.address),
+          country: normalizeText(row?.country),
+          startDate: normalizeText(row?.startDate),
+          endDate: normalizeText(row?.endDate),
+          degree: normalizeText(row?.degree),
+          fieldOfStudy: normalizeText(row?.fieldOfStudy),
+          gpa: normalizeText(row?.gpa),
+        },
+      }))
+
+    const essayWhyMedicine = normalizeText(formValues.whyMedicine)
+    const essayWhyMUCM = normalizeText(formValues.whyMUCM)
+    const essayPersonalStatement = normalizeText(formValues.personalStatement)
+
+    let experienceRows = (Array.isArray(formValues.experiences) ? formValues.experiences : [])
+      .filter((row) => hasAnyValue(row || {}))
+      .map((row) => ({
+        experience_type: normalizeText(row?.type),
+        role_position: normalizeText(row?.role),
+        organization: normalizeText(row?.organization),
+        hours_per_week: normalizeText(row?.hoursPerWeek),
+        start_date: monthToDateOnly(row?.startDate),
+        end_date: monthToDateOnly(row?.endDate),
+        is_current: !normalizeText(row?.endDate),
+        description: normalizeText(row?.description),
+        // Kept for legacy DB compatibility (also saved on application table).
+        why_medicine: essayWhyMedicine,
+        why_mucm: essayWhyMUCM,
+        per_statement_essay: essayPersonalStatement,
+      }))
+
+    if (experienceRows.length === 0 && (essayWhyMedicine || essayWhyMUCM || essayPersonalStatement)) {
+      experienceRows = [
+        {
+          why_medicine: essayWhyMedicine,
+          why_mucm: essayWhyMUCM,
+          per_statement_essay: essayPersonalStatement,
+        },
+      ]
+    }
+
+    return {
+      personalDetails: {
+        title: normalizeText(formValues.title),
+        first_name: normalizeText(formValues.firstName),
+        middle_name: normalizeText(formValues.middleName),
+        surname: normalizeText(formValues.surname),
+        preferred_name: normalizeText(formValues.preferredName),
+        pronouns: normalizeText(formValues.pronouns),
+        date_of_birth: normalizeText(formValues.dateOfBirth),
+        gender: normalizeText(formValues.gender),
+        name_change: normalizeText(formValues.nameChanged),
+        ethnicity_race: normalizeText(formValues.ethnicity),
+        nationality_citizenship: normalizeText(formValues.citizenship),
+        country_of_residence: normalizeText(formValues.countryOfResidence),
+        passport_number: normalizeText(formValues.passportNumber),
+        passport_expiry_date: normalizeText(formValues.passportExpiry),
+        visa_immigration_status: normalizeText(formValues.visaStatus),
+        email: normalizeText(formValues.email),
+        mobile_phone: normalizeText(formValues.phoneMobile),
+        home_phone: normalizeText(formValues.phoneHome),
+        street_address: normalizeText(formValues.permanentAddress),
+        city: normalizeText(formValues.city),
+        state_province: normalizeText(formValues.stateProvince),
+        postal_code: normalizeText(formValues.postalCode),
+        country: normalizeText(formValues.country),
+        mailing_same_as_permanent: Boolean(formValues.sameAsPermanent),
+        mailing_street_address: formValues.sameAsPermanent
+          ? null
+          : normalizeText(formValues.mailingAddress),
+        mailing_city: formValues.sameAsPermanent ? null : normalizeText(formValues.mailingCity),
+        mailing_state_province: formValues.sameAsPermanent
+          ? null
+          : normalizeText(formValues.mailingStateProvince),
+        mailing_postal_code: formValues.sameAsPermanent
+          ? null
+          : normalizeText(formValues.mailingPostalCode),
+        mailing_country: formValues.sameAsPermanent ? null : normalizeText(formValues.mailingCountry),
+      },
+      emergencyContacts: hasAnyValue(emergencyPayload) ? [emergencyPayload] : [],
+      parentGuardian: {
+        father_name: normalizeText(formValues.fatherName),
+        father_occupation: normalizeText(formValues.fatherOccupation),
+        father_email: normalizeText(formValues.fatherEmail),
+        father_phone: normalizeText(formValues.fatherPhone),
+        mother_name: normalizeText(formValues.motherName),
+        mother_occupation: normalizeText(formValues.motherOccupation),
+        mother_email: normalizeText(formValues.motherEmail),
+        mother_phone: normalizeText(formValues.motherPhone),
+      },
+      academicInstitutions: academicInstitutionRows,
+      englishProficiency: {
+        proficiency_level: normalizeText(formValues.englishProficiency),
+        other_languages_spoken: normalizeText(formValues.otherLanguagesSpoken),
+        test_type: normalizeText(formValues.englishTestType),
+        test_score: normalizeText(formValues.englishTestScore),
+      },
+      standardizedTests: [
+        {
+          is_taken: yesNoToBoolean(formValues.hasStandardizedTest),
+          test_type: normalizeText(formValues.standardizedTestType),
+          score: normalizeText(formValues.standardizedTestScore),
+        },
+      ],
+      admissionSought: {
+        program_type: normalizeText(formValues.programType),
+        sub_program: normalizeText(formValues.subProgram),
+        transfer_credits: (Array.isArray(formValues.transferCredits) ? formValues.transferCredits : []).filter(
+          (row) => hasAnyValue(row || {}),
+        ),
+        preferred_semester: normalizeText(formValues.semester),
+        preferred_year: formValues.year ? Number(formValues.year) : null,
+      },
+      disclosures: {
+        discipline_action: yesNoToBoolean(formValues.hasBeenDisciplined),
+        discipline_explanation: normalizeText(formValues.disciplineActionExplanation),
+        criminal_conviction: yesNoToBoolean(formValues.hasBeenConvicted),
+        conviction_explanation: normalizeText(formValues.convictionExplanation),
+        disability: yesNoToBoolean(formValues.hasDisability),
+        disability_details: normalizeText(formValues.disabilityDetails),
+        special_accomadations: yesNoToBoolean(formValues.requiresAccommodation),
+        accommodation_details: normalizeText(formValues.accommodationDetails),
+        referral_source: normalizeText(formValues.howHeard),
+        referral_source_other: normalizeText(formValues.howHeardOther),
+        referral_description: normalizeText(formValues.referralDescription),
+      },
+      experiences: experienceRows,
+      documents: {
+        upload_progress: true,
+        passport: normalizeText(formValues.passport),
+        bank_statement: normalizeText(formValues.bankStatement),
+        premedical_Bachelor_ug_HSC_Certificate: normalizeText(formValues.preMedTranscript),
+        Secondary_11grade: normalizeText(formValues.grade11Transcript),
+        cv_resume: normalizeText(formValues.cv),
+        passport_photo: normalizeText(formValues.passportPhoto),
+        other_professional_transcripts: normalizeText(formValues.otherProfessionalTranscripts),
+        exam_results_marksheet: normalizeText(formValues.examResults),
+        sponsor_signed_financial_form: normalizeText(formValues.sponsorSignedFinancialForm),
+      },
+      financialSupport: {
+        student_full_name: normalizeText(formValues.studentName),
+        student_id: normalizeText(formValues.studentId),
+        program_of_study: normalizeText(formValues.programOfStudy),
+        expected_start_date: normalizeText(formValues.expectedStartDate),
+        paymentOption: normalizeText(formValues.paymentOption),
+        selfFundedSource: normalizeText(formValues.selfFundedSource),
+        sponsor_full_name: normalizeText(formValues.sponsorFullName),
+        sponsorRelationship: normalizeText(formValues.sponsorRelationship),
+        occupation: normalizeText(formValues.sponsorOccupation),
+        sponsorEmployer: normalizeText(formValues.sponsorEmployer),
+        sponsorAddress: normalizeText(formValues.sponsorAddress),
+        sponsor_city: normalizeText(formValues.sponsorCity),
+        sponsor_state: normalizeText(formValues.sponsorState),
+        sponsorPostalCode: normalizeText(formValues.sponsorPostalCode),
+        sponsor_country: normalizeText(formValues.sponsorCountry),
+        sponsor_phone: normalizeText(formValues.sponsorPhone),
+        sponsor_email: normalizeText(formValues.sponsorEmail),
+        orgName: normalizeText(formValues.orgName),
+        org_contact_person: normalizeText(formValues.orgContactPerson),
+        orgContactTitle: normalizeText(formValues.orgContactTitle),
+        orgAddress: normalizeText(formValues.orgAddress),
+        org_city: normalizeText(formValues.orgCity),
+        org_state: normalizeText(formValues.orgState),
+        orgPostalCode: normalizeText(formValues.orgPostalCode),
+        org_country: normalizeText(formValues.orgCountry),
+        org_phone: normalizeText(formValues.orgPhone),
+        org_email: normalizeText(formValues.orgEmail),
+        hasBankStatement: Boolean(formValues.hasBankStatement),
+        hasIncomeProof: Boolean(formValues.hasIncomeProof),
+        hasSponsorLetter: Boolean(formValues.hasSponsorLetter),
+        hasScholarshipLetter: Boolean(formValues.hasScholarshipLetter),
+        hasLoanApproval: Boolean(formValues.hasLoanApproval),
+        certifyAccurate: Boolean(formValues.certifyAccurate),
+        certifyFinancialResponsibility: Boolean(formValues.certifyFinancialResponsibility),
+        certifyDate: normalizeText(formValues.certifyDate),
+        sponsorCertifySupport: Boolean(formValues.sponsorCertifySupport),
+        sponsorCertifyDate: normalizeText(formValues.sponsorCertifyDate),
+        studentSignatureMethod: normalizeText(formValues.studentSignatureMethod),
+        studentSignatureTyped: normalizeText(formValues.studentSignatureTyped),
+        studentSignatureUpload: normalizeText(formValues.studentSignatureUpload),
+        sponsorSignedFinancialForm: normalizeText(formValues.sponsorSignedFinancialForm),
+      },
+    }
+  }
+
+  async function syncApplicationSections(applicationRowId) {
+    if (!applicationRowId) {
+      throw new Error('Application ID is missing while syncing sections.')
+    }
+
+    const fullApplication = await fetchApplicationFullById(applicationRowId)
+    const payloads = buildSectionPayloads()
+
+    await upsertSingletonSection(
+      applicationRowId,
+      'personal-details',
+      payloads.personalDetails,
+      fullApplication.personal_details,
+    )
+    await upsertListSection(
+      applicationRowId,
+      'emergency-contacts',
+      payloads.emergencyContacts,
+      fullApplication.emergency_contacts,
+    )
+    await upsertSingletonSection(
+      applicationRowId,
+      'parent-guardian',
+      payloads.parentGuardian,
+      fullApplication.parent_guardian_info,
+    )
+    await upsertListSection(
+      applicationRowId,
+      'academic-institutions',
+      payloads.academicInstitutions,
+      fullApplication.academic_institutions,
+    )
+    await upsertSingletonSection(
+      applicationRowId,
+      'english-proficiency',
+      payloads.englishProficiency,
+      fullApplication.english_proficiency,
+    )
+    await upsertListSection(
+      applicationRowId,
+      'standardized-tests',
+      payloads.standardizedTests,
+      fullApplication.standardized_tests,
+    )
+    await upsertSingletonSection(
+      applicationRowId,
+      'admission-sought',
+      payloads.admissionSought,
+      fullApplication.admission_sought,
+    )
+    await upsertSingletonSection(
+      applicationRowId,
+      'disclosures',
+      payloads.disclosures,
+      fullApplication.disclosure,
+    )
+    await upsertListSection(applicationRowId, 'experiences', payloads.experiences, fullApplication.experiences)
+    await upsertSingletonSection(applicationRowId, 'document', payloads.documents, fullApplication.document)
+    await upsertSingletonSection(
+      applicationRowId,
+      'financial-support',
+      payloads.financialSupport,
+      fullApplication.financial_support,
+    )
+  }
+
+  function buildApplicationPayload({ stepIndex, isComplete }) {
+    return {
+      application_id: activeApplication.applicationId || `APP-${Date.now()}`,
+      current_status: isComplete ? 'submitted' : 'draft',
+      completed_steps: Math.max(1, stepIndex + 1),
+      is_complete: isComplete,
+      submitted_at: isComplete ? new Date().toISOString() : undefined,
+      why_medicine: formValues.whyMedicine || undefined,
+      why_mucm: formValues.whyMUCM || undefined,
+      personal_statement: formValues.personalStatement || undefined,
+      application_agreement_accepted: Boolean(formValues.applicationAgreement),
+      application_agreement_at: formValues.applicationAgreement ? new Date().toISOString() : undefined,
+    }
+  }
+
+  async function persistApplication({ stepIndex, isComplete }) {
+    const payload = buildApplicationPayload({ stepIndex, isComplete })
+    let existingId = activeApplication.id
+
+    if (!existingId && activeApplication.applicationId) {
+      const existing = await fetchApplicationByApplicationId(activeApplication.applicationId)
+      existingId = existing?.id || ''
+      if (existingId) {
+        setActiveApplication((previous) => ({ ...previous, id: String(existingId) }))
+      }
+    }
+
+    if (!existingId) {
+      const data = await postOrPutApplication('', 'POST', payload)
+      let createdId = data.id || data.data?.id || data.application?.id || ''
+      const createdApplicationId =
+        data.application_id || data.data?.application_id || payload.application_id
+
+      if (!createdId && createdApplicationId) {
+        const fetched = await fetchApplicationByApplicationId(createdApplicationId)
+        createdId = fetched?.id || ''
+      }
+      if (!createdId) {
+        throw new Error('Application created but could not resolve application row ID.')
+      }
+
+      setActiveApplication({
+        id: String(createdId ?? ''),
+        applicationId: String(createdApplicationId ?? payload.application_id),
+      })
+      return {
+        id: String(createdId ?? ''),
+        applicationId: String(createdApplicationId ?? payload.application_id),
+      }
+    }
+
+    await postOrPutApplication(`/${existingId}`, 'PUT', payload)
+    return { ...activeApplication, id: String(existingId) }
+  }
+
+  function evaluateSubmitCooldown() {
+    try {
+      const allSubmissions = JSON.parse(window.localStorage.getItem(SUBMISSIONS_KEY) ?? '[]')
+      const mySubmissions = (Array.isArray(allSubmissions) ? allSubmissions : []).filter(
+        (item) => item.userEmail === userEmail && item.submittedAt,
+      )
+      if (mySubmissions.length === 0) {
+        return { isBlocked: false, nextAllowedAt: null }
+      }
+
+      const latestSubmission = mySubmissions.reduce((latest, item) => {
+        const ts = new Date(item.submittedAt).getTime()
+        return Number.isFinite(ts) && ts > latest ? ts : latest
+      }, 0)
+
+      if (!latestSubmission) {
+        return { isBlocked: false, nextAllowedAt: null }
+      }
+
+      const nextAllowedAt = latestSubmission + SUBMIT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+      const isBlocked = Date.now() < nextAllowedAt
+      return { isBlocked, nextAllowedAt: isBlocked ? nextAllowedAt : null }
+    } catch {
+      return { isBlocked: false, nextAllowedAt: null }
+    }
+  }
+
+  function mapFaqRowsToSections(rows) {
+    const grouped = new Map()
+    rows.forEach((row) => {
+      const sectionTitle =
+        row?.faq_category?.name ||
+        row?.category ||
+        'General'
+      if (!grouped.has(sectionTitle)) {
+        grouped.set(sectionTitle, [])
+      }
+      grouped.get(sectionTitle).push({
+        question: String(row?.question ?? '').trim(),
+        answer: String(row?.answer ?? '').trim(),
+      })
+    })
+    return Array.from(grouped.entries()).map(([title, items]) => ({ title, items }))
+  }
 
   useEffect(() => {
     if (!draftNotice) {
@@ -111,6 +734,48 @@ function ApplicationPage() {
     const timeoutId = window.setTimeout(() => setDraftNotice(''), 4500)
     return () => window.clearTimeout(timeoutId)
   }, [draftNotice])
+
+  useEffect(() => {
+    if (activeModule !== 'FAQ' || supportCenterTab !== 'faq') {
+      return
+    }
+    if (faqApiSections.length > 0) {
+      return
+    }
+
+    let cancelled = false
+    setFaqLoading(true)
+    setFaqError('')
+    fetchPublishedFaqs()
+      .then((rows) => {
+        if (cancelled) return
+        const mapped = mapFaqRowsToSections(rows)
+        setFaqApiSections(mapped)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setFaqError(error.message || 'Unable to load FAQs right now.')
+      })
+      .finally(() => {
+        if (!cancelled) setFaqLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeModule, supportCenterTab, faqApiSections.length])
+
+  useEffect(() => {
+    if (submitted) {
+      return
+    }
+    const status = evaluateSubmitCooldown()
+    setCooldownNotice({
+      isBlocked: status.isBlocked,
+      nextAllowedAt: status.nextAllowedAt,
+      open: status.isBlocked,
+    })
+  }, [submitted, userEmail])
 
   useEffect(() => {
     // Keep UX consistent: every step opens from the top.
@@ -408,7 +1073,7 @@ function ApplicationPage() {
     setFormError('')
   }
 
-  function handleNext() {
+  async function handleNext() {
     const stepErrors = validateStep(currentStep, formValues)
 
     if (Object.keys(stepErrors).length > 0) {
@@ -427,23 +1092,35 @@ function ApplicationPage() {
     } catch {
       // ignore quota / private mode
     }
-    setCurrentStepIndex(nextStepIndex)
-    setDraftNotice('Progress auto-saved. Moving to next step.')
+    try {
+      const meta = await persistApplication({ stepIndex: nextStepIndex, isComplete: false })
+      await syncApplicationSections(meta.id)
+      setCurrentStepIndex(nextStepIndex)
+      setDraftNotice('Progress saved to server. Moving to next step.')
+    } catch (error) {
+      setFormError(error.message || 'Unable to save progress to server.')
+    }
   }
 
   function handlePrevious() {
     setCurrentStepIndex((previous) => Math.max(previous - 1, 0))
   }
 
-  function handleSaveDraft() {
+  async function handleSaveDraft() {
     try {
       window.localStorage.setItem('mucm-application-form', JSON.stringify(formValues))
       window.localStorage.setItem('mucm-current-step', JSON.stringify(currentStepIndex))
     } catch {
       // ignore quota / private mode
     }
-    setFormError('')
-    setDraftNotice('Draft saved. Your progress is stored on this device.')
+    try {
+      const meta = await persistApplication({ stepIndex: currentStepIndex, isComplete: false })
+      await syncApplicationSections(meta.id)
+      setFormError('')
+      setDraftNotice('Draft saved to server successfully.')
+    } catch (error) {
+      setFormError(error.message || 'Unable to save draft to server.')
+    }
   }
 
   function handleModuleChange(moduleName) {
@@ -454,7 +1131,18 @@ function ApplicationPage() {
     setActiveModule(moduleName)
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
+    const cooldownStatus = evaluateSubmitCooldown()
+    if (cooldownStatus.isBlocked) {
+      setCooldownNotice({
+        isBlocked: true,
+        nextAllowedAt: cooldownStatus.nextAllowedAt,
+        open: true,
+      })
+      setFormError('You have already submitted an application. New submission is allowed after cooldown period.')
+      return
+    }
+
     let firstInvalidStep = -1
     const allErrors = {}
 
@@ -477,11 +1165,22 @@ function ApplicationPage() {
 
     setValidationErrors({})
     setFormError('')
+    let persistedApplicationMeta = activeApplication
+    try {
+      persistedApplicationMeta = await persistApplication({
+        stepIndex: applicationSteps.length - 1,
+        isComplete: true,
+      })
+      await syncApplicationSections(persistedApplicationMeta.id)
+    } catch (error) {
+      setFormError(error.message || 'Unable to submit application to server.')
+      return
+    }
     const documentFields =
       applicationSteps
         .find((step) => step.id === 'documents')
         ?.fields.filter((field) => field.type === 'file') ?? []
-    const applicationId = `APP-${Date.now()}`
+    const applicationId = persistedApplicationMeta.applicationId || `APP-${Date.now()}`
     const submittedAt = new Date().toISOString()
     const snapshot =
       typeof structuredClone === 'function'
@@ -508,7 +1207,12 @@ function ApplicationPage() {
     } catch {
       // ignore storage issues
     }
+    setSubmittedSnapshot(snapshot)
     setLastSubmissionId(applicationId)
+    // Clear current draft so returning to /application starts a new blank form.
+    setCurrentStepIndex(0)
+    setFormValues(initialForm)
+    setActiveApplication({ id: '', applicationId: '' })
     setSubmitted(true)
   }
 
@@ -516,10 +1220,13 @@ function ApplicationPage() {
     setCurrentStepIndex(0)
     setFormValues(initialForm)
     setSubmitted(false)
+    setSubmittedSnapshot(null)
     setLastSubmissionId('')
+    setActiveApplication({ id: '', applicationId: '' })
   }
 
   async function handleDownloadApplicationForm() {
+    const valuesForPdf = submitted && submittedSnapshot ? submittedSnapshot : formValues
     const sections = []
     applicationSteps
       .filter((step) => step.id !== 'reviewSubmit')
@@ -528,14 +1235,14 @@ function ApplicationPage() {
           (field) =>
             field.type !== 'note' &&
             !String(field.name ?? '').startsWith('__') &&
-            isFieldVisible(field, formValues),
+            isFieldVisible(field, valuesForPdf),
         )
         if (visibleFields.length === 0) return
 
         const entries = []
         visibleFields.forEach((field) => {
           if (field.type === 'repeatable') {
-            const items = Array.isArray(formValues[field.name]) ? formValues[field.name] : []
+            const items = Array.isArray(valuesForPdf[field.name]) ? valuesForPdf[field.name] : []
             const itemLines = []
             if (items.length === 0) {
               itemLines.push('No entries')
@@ -554,7 +1261,7 @@ function ApplicationPage() {
           } else {
             entries.push({
               label: field.label,
-              value: getSingleFieldDisplayValue(field, formValues[field.name]),
+              value: getSingleFieldDisplayValue(field, valuesForPdf[field.name]),
             })
           }
         })
@@ -701,6 +1408,9 @@ function ApplicationPage() {
             : 'text-[#0A1628]/55 hover:bg-[#f8f8f7]/70 hover:text-[#0A1628]'
         }`
 
+      const visibleFaqSections =
+        faqApiSections.length > 0 ? faqApiSections : faqSections
+
       return (
         <section className="page-gutter-x space-y-4 py-4 sm:py-6 lg:py-8">
           <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
@@ -753,7 +1463,15 @@ function ApplicationPage() {
               aria-labelledby="support-tab-faq"
               className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5"
             >
-              {faqSections.map((section) => (
+              {faqLoading ? (
+                <p className="text-sm text-[#0A1628]/60">Loading FAQs...</p>
+              ) : null}
+              {faqError ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  {faqError}
+                </p>
+              ) : null}
+              {visibleFaqSections.map((section) => (
                 <div key={section.title} className="space-y-2">
                   <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#0A1628]/45">
                     {section.title}
@@ -1062,6 +1780,36 @@ function ApplicationPage() {
 
   return (
     <main className="min-h-screen bg-background">
+      {cooldownNotice.open && !submitted && activeModule === 'Application form' ? (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+          <div className="pointer-events-auto w-full max-w-lg rounded-xl border border-[#D4A843]/40 bg-white p-5 shadow-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#7a5a14]">
+              Submission Notice
+            </p>
+            <h2 className="mt-1 text-2xl text-[#0A1628] [font-family:'DM_Serif_Display',serif]">
+              Application already submitted
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-[#0A1628]/70">
+              You already submitted an application. Next new application submission will be allowed after{' '}
+              <strong>{SUBMIT_COOLDOWN_DAYS} days</strong>.
+            </p>
+            {cooldownNotice.nextAllowedAt ? (
+              <p className="mt-2 text-sm font-semibold text-[#0A1628]/80">
+                Next allowed submission: {new Date(cooldownNotice.nextAllowedAt).toLocaleString()}
+              </p>
+            ) : null}
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCooldownNotice((prev) => ({ ...prev, open: true }))}
+                className="rounded-lg border border-[#0A1628]/15 bg-white px-4 py-2 text-sm font-semibold text-[#0A1628]/80 transition hover:border-[#D4A843]/50 hover:bg-[#fff8e8]"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {!submitted ? (
         <header className="page-gutter-x border-b border-border bg-card/95 py-3 backdrop-blur-md lg:hidden">
           <div className="mx-auto flex max-w-7xl flex-col gap-3">

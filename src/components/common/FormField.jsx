@@ -6,6 +6,15 @@ import { normalizeSelectOptions } from '../../utils/formVisibility.js'
 import DateInput from './DateInput.jsx'
 import FileDropzone from './FileDropzone.jsx'
 
+function sanitizePhoneInput(raw) {
+  const value = String(raw ?? '')
+  const cleaned = value.replace(/[^\d+\s()-]/g, '')
+  const plusNormalized = cleaned.replace(/\+/g, '')
+  return cleaned.trimStart().startsWith('+')
+    ? `+${plusNormalized}`
+    : plusNormalized
+}
+
 function RadioOptionDescription({ text }) {
   if (!text) return null
   const segments = text.split(/\*\*/)
@@ -732,7 +741,10 @@ function FormField({ field, value, onChange, error, onUploadActivityChange, allV
         value={value ?? ''}
         required={required}
         placeholder={placeholder}
-        onChange={(event) => onChange(name, event.target.value)}
+        inputMode={type === 'tel' ? 'numeric' : undefined}
+        onChange={(event) =>
+          onChange(name, type === 'tel' ? sanitizePhoneInput(event.target.value) : event.target.value)
+        }
       />
       {helper ? (
         <small className="mt-1 block text-sm text-muted-foreground">{helper}</small>
