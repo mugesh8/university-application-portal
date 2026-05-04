@@ -4,7 +4,12 @@ import StepForm from '../components/application/StepForm.jsx'
 import StepSidebar from '../components/application/StepSidebar.jsx'
 import PrimaryButton from '../components/common/PrimaryButton.jsx'
 import ProfileDropdown from '../components/common/ProfileDropdown.jsx'
-import { fetchPublishedFaqs } from '../api/faqApi.js'
+import {
+  createSupportTicket,
+  fetchMySupportTickets,
+  fetchPublishedFaqs,
+  fetchSupportTicketCategories,
+} from '../api/faqApi.js'
 import { apiUrl } from '../config/baseUrl.js'
 import { applicationSteps } from '../data/applicationSteps.js'
 import { countries } from '../data/countries.js'
@@ -19,22 +24,27 @@ import { getAutofillStudentInfo } from '../utils/studentInfoAutofill.js'
 import { downloadApplicationSummaryPdf } from '../utils/applicationFormPdf.js'
 import { getSingleFieldDisplayValue } from '../utils/submissionDisplay.js'
 import { getSelectValues, isFieldVisible } from '../utils/formVisibility.js'
+import {
+  filterFaqsByContext,
+  groupFaqRowsByCategory,
+  sanitizeFaqHtml,
+  searchFaqRows,
+} from '../utils/faqUtils.js'
 
 const crestLogo =
   'https://d2xsxph8kpxj0f.cloudfront.net/310519663394975842/o5YxQXzG37vUfAnZtRoyQg/mucm-crest-logo_aac17a92.png'
 const SUBMISSIONS_KEY = 'mucm-submitted-applications'
-const SUPPORT_TICKETS_KEY = 'mucm-support-tickets'
 const ACTIVE_APPLICATION_KEY = 'mucm-active-application'
 const SUBMIT_COOLDOWN_DAYS = Number(import.meta.env.VITE_APPLICATION_RESUBMIT_COOLDOWN_DAYS) || 30
 
 function getSupportTicketStatusStyles(status) {
-  switch (status) {
-    case 'Resolved':
+  switch (String(status ?? '').toLowerCase()) {
+    case 'resolved':
       return {
         pill: 'bg-green-100 text-green-900 ring-1 ring-green-200/80',
         border: 'border-l-[3px] border-l-green-600',
       }
-    case 'In progress':
+    case 'pending':
       return {
         pill: 'bg-sky-100 text-sky-900 ring-1 ring-sky-200/80',
         border: 'border-l-[3px] border-l-sky-600',
@@ -48,13 +58,59 @@ function getSupportTicketStatusStyles(status) {
 }
 
 function getSupportTicketStatusHint(status) {
-  switch (status ?? 'Open') {
-    case 'Resolved':
+  switch (String(status ?? '').toLowerCase()) {
+    case 'resolved':
       return 'This request is closed. Email us if you still need assistance.'
-    case 'In progress':
+    case 'in progress':
+    case 'pending':
       return 'Our team is actively reviewing your message.'
     default:
       return 'We have received your ticket and will reply by email.'
+  }
+}
+
+function getSupportTicketStatusLabel(status) {
+  const normalized = String(status ?? '').toLowerCase()
+  if (normalized === 'resolved') return 'Resolved'
+  if (normalized === 'in progress') return 'In progress'
+  if (normalized === 'pending') return 'Pending'
+  return 'Open'
+}
+
+function getAuthSession() {
+  try {
+    return JSON.parse(window.localStorage.getItem('mucm-auth-session') ?? '{}')
+  } catch {
+    return {}
+  }
+}
+
+function decodeJwtSub(token) {
+  if (!token || typeof token !== 'string') return ''
+  const parts = token.split('.')
+  if (parts.length < 2) return ''
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = `${base64}${'='.repeat((4 - (base64.length % 4 || 4)) % 4)}`
+    const json =
+      typeof window !== 'undefined' && typeof window.atob === 'function'
+        ? window.atob(padded)
+        : atob(padded)
+    const parsed = JSON.parse(json)
+    return String(parsed?.sub ?? '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function formatWhen(value) {
+  if (!value) return 'Unknown time'
+  try {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return 'Unknown time'
+    return date.toLocaleString()
+  } catch {
+    return 'Unknown time'
   }
 }
 
@@ -75,13 +131,13 @@ function ApplicationPage() {
   const desktopScrollRef = useRef(null)
   const autoSaveTimerRef = useRef(null)
   const hasInitializedAutoSaveRef = useRef(false)
-  const userEmail = (() => {
-    try {
-      return JSON.parse(window.localStorage.getItem('mucm-auth-session') ?? '{}').email ?? ''
-    } catch {
-      return ''
-    }
-  })()
+  const authSession = getAuthSession()
+  const userEmail = authSession?.email ?? ''
+  const authToken = String(authSession?.token ?? '').trim()
+  const portalUserId =
+    String(authSession?.userId ?? '').trim() ||
+    String(authSession?.id ?? '').trim() ||
+    decodeJwtSub(authToken)
   const [activeModule, setActiveModule] = useState('Application form')
   const [currentStepIndex, setCurrentStepIndex] = usePersistentState(
     'mucm-current-step',
@@ -97,20 +153,26 @@ function ApplicationPage() {
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved')
   const [submitted, setSubmitted] = useState(false)
   const [ticketForm, setTicketForm] = useState({
-    subject: '',
-    message: '',
+    email: userEmail,
+    categoryId: '',
+    question: '',
   })
   const [ticketNotice, setTicketNotice] = useState('')
-  const [ticketHistory, setTicketHistory] = usePersistentState(SUPPORT_TICKETS_KEY, [])
+  const [ticketHistory, setTicketHistory] = useState([])
+  const [supportTicketCategories, setSupportTicketCategories] = useState([])
+  const [supportTicketLoading, setSupportTicketLoading] = useState(false)
+  const [supportTicketSubmitting, setSupportTicketSubmitting] = useState(false)
   const [supportCenterTab, setSupportCenterTab] = usePersistentState(
     'mucm-support-center-tab',
     'faq',
   )
   const [lastSubmissionId, setLastSubmissionId] = useState('')
   const [submittedSnapshot, setSubmittedSnapshot] = useState(null)
-  const [faqApiSections, setFaqApiSections] = useState([])
+  const [faqApiRows, setFaqApiRows] = useState([])
   const [faqLoading, setFaqLoading] = useState(false)
   const [faqError, setFaqError] = useState('')
+  const [faqSearch, setFaqSearch] = useState('')
+  const [faqCategory, setFaqCategory] = useState('')
   const [cooldownNotice, setCooldownNotice] = useState({
     isBlocked: false,
     nextAllowedAt: null,
@@ -126,13 +188,8 @@ function ApplicationPage() {
   const applicationsPrefixRef = useRef(import.meta.env.VITE_APPLICATIONS_PREFIX || '/api/v1/applications')
 
   function getAuthHeader() {
-    try {
-      const token = JSON.parse(window.localStorage.getItem('mucm-auth-session') ?? '{}')?.token
-      if (token && String(token).trim()) {
-        return { Authorization: `Bearer ${token}` }
-      }
-    } catch {
-      // ignore malformed local storage
+    if (authToken) {
+      return { Authorization: `Bearer ${authToken}` }
     }
     return {}
   }
@@ -709,24 +766,6 @@ function ApplicationPage() {
     }
   }
 
-  function mapFaqRowsToSections(rows) {
-    const grouped = new Map()
-    rows.forEach((row) => {
-      const sectionTitle =
-        row?.faq_category?.name ||
-        row?.category ||
-        'General'
-      if (!grouped.has(sectionTitle)) {
-        grouped.set(sectionTitle, [])
-      }
-      grouped.get(sectionTitle).push({
-        question: String(row?.question ?? '').trim(),
-        answer: String(row?.answer ?? '').trim(),
-      })
-    })
-    return Array.from(grouped.entries()).map(([title, items]) => ({ title, items }))
-  }
-
   useEffect(() => {
     if (!draftNotice) {
       return undefined
@@ -739,18 +778,13 @@ function ApplicationPage() {
     if (activeModule !== 'FAQ' || supportCenterTab !== 'faq') {
       return
     }
-    if (faqApiSections.length > 0) {
-      return
-    }
-
     let cancelled = false
     setFaqLoading(true)
     setFaqError('')
     fetchPublishedFaqs()
       .then((rows) => {
         if (cancelled) return
-        const mapped = mapFaqRowsToSections(rows)
-        setFaqApiSections(mapped)
+        setFaqApiRows(rows)
       })
       .catch((error) => {
         if (cancelled) return
@@ -763,7 +797,51 @@ function ApplicationPage() {
     return () => {
       cancelled = true
     }
-  }, [activeModule, supportCenterTab, faqApiSections.length])
+  }, [activeModule, supportCenterTab])
+
+  useEffect(() => {
+    if (activeModule !== 'FAQ' || supportCenterTab !== 'tickets') {
+      return
+    }
+    if (!portalUserId || !authToken) {
+      setTicketNotice('Please login again to access support tickets.')
+      return
+    }
+
+    let cancelled = false
+    setSupportTicketLoading(true)
+    setTicketNotice('')
+
+    Promise.all([
+      fetchSupportTicketCategories(authToken),
+      fetchMySupportTickets({ userId: portalUserId, token: authToken }),
+    ])
+      .then(([categories, tickets]) => {
+        if (cancelled) return
+        setSupportTicketCategories(categories)
+        setTicketHistory(Array.isArray(tickets) ? tickets : [])
+        setTicketForm((previous) => {
+          const hasSelected = categories.some((item) => item.id === previous.categoryId)
+          const fallbackId = categories[0]?.id ?? ''
+          return {
+            ...previous,
+            email: userEmail,
+            categoryId: hasSelected ? previous.categoryId : fallbackId,
+          }
+        })
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setTicketNotice(error.message || 'Unable to load support ticket details right now.')
+      })
+      .finally(() => {
+        if (!cancelled) setSupportTicketLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeModule, supportCenterTab, portalUserId, authToken, userEmail])
 
   useEffect(() => {
     if (submitted) {
@@ -1286,26 +1364,42 @@ function ApplicationPage() {
     }
   }
 
-  function handleRaiseTicket(event) {
+  async function handleRaiseTicket(event) {
     event.preventDefault()
-    if (!ticketForm.subject.trim() || !ticketForm.message.trim()) {
-      setTicketNotice('Please enter both subject and message before raising a ticket.')
+    const question = ticketForm.question.trim()
+    if (!ticketForm.email.trim() || !question) {
+      setTicketNotice('Please enter your email, category, and question before raising a ticket.')
       return
     }
-    const newTicket = {
-      id: `TKT-${Date.now()}`,
-      subject: ticketForm.subject.trim(),
-      message: ticketForm.message.trim(),
-      status: 'Open',
-      raisedAt: new Date().toISOString(),
-      submittedBy: userEmail || undefined,
+    if (!portalUserId || !authToken) {
+      setTicketNotice('Please login again to submit a support ticket.')
+      return
     }
-    setTicketHistory((previous) => {
-      const list = Array.isArray(previous) ? previous : []
-      return [newTicket, ...list]
-    })
-    setTicketNotice('Ticket raised successfully. Our support team will contact you shortly.')
-    setTicketForm({ subject: '', message: '' })
+
+    setSupportTicketSubmitting(true)
+    setTicketNotice('')
+    try {
+      const created = await createSupportTicket({
+        userId: portalUserId,
+        token: authToken,
+        categoryId: ticketForm.categoryId,
+        question,
+      })
+      const latest = await fetchMySupportTickets({ userId: portalUserId, token: authToken })
+      setTicketHistory(Array.isArray(latest) ? latest : [])
+      const categoryLabel =
+        created?.category ||
+        supportTicketCategories.find((item) => item.id === ticketForm.categoryId)?.name ||
+        'the selected category'
+      setTicketNotice(
+        `Ticket raised successfully under ${categoryLabel}. It is stored in support tickets and emailed to admissions.`,
+      )
+      setTicketForm((previous) => ({ ...previous, email: userEmail, question: '' }))
+    } catch (error) {
+      setTicketNotice(error.message || 'Failed to submit support ticket. Please try again.')
+    } finally {
+      setSupportTicketSubmitting(false)
+    }
   }
 
   function renderAutoSaveBadge(size = 'desktop') {
@@ -1396,7 +1490,36 @@ function ApplicationPage() {
     }
 
     if (activeModule === 'FAQ') {
-      const supportTickets = Array.isArray(ticketHistory) ? ticketHistory : []
+      const supportTickets = (Array.isArray(ticketHistory) ? ticketHistory : []).map((ticket) => ({
+        ...ticket,
+        createdAt: ticket.createdAt || ticket.created_at || null,
+        applicantEmail: ticket.applicantEmail || ticket.submittedBy || ticket.user_email || '',
+        messages:
+          Array.isArray(ticket.messages) && ticket.messages.length > 0
+            ? ticket.messages
+            : [
+                ...(ticket.message
+                  ? [
+                      {
+                        id: `${ticket.id || 'ticket'}-ask`,
+                        from: 'applicant',
+                        body: ticket.message,
+                        sentAt: ticket.created_at || ticket.createdAt,
+                      },
+                    ]
+                  : []),
+                ...(ticket.admin_reply_message
+                  ? [
+                      {
+                        id: `${ticket.id || 'ticket'}-reply`,
+                        from: 'admin',
+                        body: ticket.admin_reply_message,
+                        sentAt: ticket.admin_replied_at || ticket.updated_at || ticket.updatedAt,
+                      },
+                    ]
+                  : []),
+              ],
+      }))
       const tab =
         supportCenterTab === 'tickets' || supportCenterTab === 'faq'
           ? supportCenterTab
@@ -1408,8 +1531,18 @@ function ApplicationPage() {
             : 'text-[#0A1628]/55 hover:bg-[#f8f8f7]/70 hover:text-[#0A1628]'
         }`
 
-      const visibleFaqSections =
-        faqApiSections.length > 0 ? faqApiSections : faqSections
+      const visibleFaqSections = faqApiRows.length
+        ? groupFaqRowsByCategory(
+            searchFaqRows(
+              filterFaqsByContext(faqApiRows, currentStep?.id),
+              faqSearch,
+            ),
+          )
+        : faqSections
+      const faqCategoryList = visibleFaqSections.map((section) => section.title)
+      const filteredFaqSections = faqCategory
+        ? visibleFaqSections.filter((section) => section.title === faqCategory)
+        : visibleFaqSections
 
       return (
         <section className="page-gutter-x space-y-4 py-4 sm:py-6 lg:py-8">
@@ -1463,6 +1596,27 @@ function ApplicationPage() {
               aria-labelledby="support-tab-faq"
               className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5"
             >
+              <div className="grid gap-3 sm:grid-cols-[1fr_220px]">
+                <input
+                  type="search"
+                  value={faqSearch}
+                  onChange={(event) => setFaqSearch(event.target.value)}
+                  placeholder="Search FAQs..."
+                  className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm text-[#0A1628] outline-none transition focus:border-[#D4A843]"
+                />
+                <select
+                  value={faqCategory}
+                  onChange={(event) => setFaqCategory(event.target.value)}
+                  className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm text-[#0A1628] outline-none transition focus:border-[#D4A843]"
+                >
+                  <option value="">All categories</option>
+                  {faqCategoryList.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {faqLoading ? (
                 <p className="text-sm text-[#0A1628]/60">Loading FAQs...</p>
               ) : null}
@@ -1471,7 +1625,7 @@ function ApplicationPage() {
                   {faqError}
                 </p>
               ) : null}
-              {visibleFaqSections.map((section) => (
+              {filteredFaqSections.map((section) => (
                 <div key={section.title} className="space-y-2">
                   <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#0A1628]/45">
                     {section.title}
@@ -1489,9 +1643,10 @@ function ApplicationPage() {
                           </span>
                         </span>
                       </summary>
-                      <p className="mt-2 border-t border-[#0A1628]/10 pt-2 text-sm text-[#0A1628]/60">
-                        {item.answer}
-                      </p>
+                      <div
+                        className="mt-2 border-t border-[#0A1628]/10 pt-2 text-sm text-[#0A1628]/60"
+                        dangerouslySetInnerHTML={{ __html: sanitizeFaqHtml(item.answer) }}
+                      />
                     </details>
                   ))}
                 </div>
@@ -1507,12 +1662,6 @@ function ApplicationPage() {
               <aside className="rounded-2xl border border-[#D4A843]/35 bg-gradient-to-br from-[#fff7df] to-white p-4 shadow-sm sm:p-5">
                 <h3 className="text-lg font-semibold text-[#0A1628]">{faqSupport.title}</h3>
                 <p className="mt-1 text-sm text-[#0A1628]/60">{faqSupport.description}</p>
-                <a
-                  href={`mailto:${faqSupport.email}`}
-                  className="mt-4 inline-flex rounded-lg border border-[#D4A843]/40 bg-[#f8f8f7] px-3 py-2 text-sm font-semibold text-[#0A1628] transition hover:bg-[#fff1c9]"
-                >
-                  {faqSupport.email}
-                </a>
 
                 <form
                   className="mt-4 rounded-xl border border-border bg-card p-3"
@@ -1522,30 +1671,49 @@ function ApplicationPage() {
                     Raise Ticket
                   </p>
                   <label className="mt-2 block">
-                    <span className="text-xs font-semibold text-[#0A1628]/70">Subject</span>
+                    <span className="text-xs font-semibold text-[#0A1628]/70">Email</span>
                     <input
-                      type="text"
-                      value={ticketForm.subject}
-                      onChange={(event) => updateTicketField('subject', event.target.value)}
-                      placeholder="Issue with upload / payment / form"
+                      type="email"
+                      autoComplete="email"
+                      value={ticketForm.email}
+                      onChange={(event) => updateTicketField('email', event.target.value)}
+                      placeholder="you@example.com"
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-[#0A1628] outline-none transition placeholder:text-[#0A1628]/35 focus:border-[#D4A843]"
                     />
                   </label>
                   <label className="mt-2 block">
-                    <span className="text-xs font-semibold text-[#0A1628]/70">Message</span>
+                    <span className="text-xs font-semibold text-[#0A1628]/70">Category</span>
+                    <select
+                      value={ticketForm.categoryId}
+                      onChange={(event) => updateTicketField('categoryId', event.target.value)}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-[#0A1628] outline-none transition placeholder:text-[#0A1628]/35 focus:border-[#D4A843]"
+                    >
+                      {supportTicketCategories.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="mt-2 block">
+                    <span className="text-xs font-semibold text-[#0A1628]/70">Question</span>
                     <textarea
-                      value={ticketForm.message}
-                      onChange={(event) => updateTicketField('message', event.target.value)}
-                      placeholder="Describe the issue clearly..."
+                      value={ticketForm.question}
+                      onChange={(event) => updateTicketField('question', event.target.value)}
+                      placeholder="Describe your issue or question clearly..."
                       className="mt-1 min-h-24 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-[#0A1628] outline-none transition placeholder:text-[#0A1628]/35 focus:border-[#D4A843]"
                     />
                   </label>
                   <button
                     type="submit"
+                    disabled={supportTicketSubmitting}
                     className="mt-3 inline-flex items-center justify-center rounded-lg bg-[#0A1628] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#163457]"
                   >
-                    Submit Ticket
+                    {supportTicketSubmitting ? 'Submitting...' : 'Submit Ticket'}
                   </button>
+                  {supportTicketLoading ? (
+                    <p className="mt-2 text-xs text-[#0A1628]/55">Loading support categories and tickets...</p>
+                  ) : null}
                   {ticketNotice ? (
                     <p className="mt-2 text-xs text-[#0A1628]/65">{ticketNotice}</p>
                   ) : null}
@@ -1570,13 +1738,13 @@ function ApplicationPage() {
                     ) : (
                       <ul className="mt-3 max-h-[min(28rem,70vh)] space-y-3 overflow-y-auto pr-0.5">
                         {supportTickets.map((ticket, ticketIndex) => {
-                          const status = ticket.status ?? 'Open'
+                          const status = ticket.status ?? 'open'
                           const { pill: statusPillClass, border: statusBorderClass } =
                             getSupportTicketStatusStyles(status)
                           const statusHint = getSupportTicketStatusHint(status)
                           let raised = null
                           try {
-                            raised = ticket.raisedAt ? new Date(ticket.raisedAt) : null
+                            raised = ticket.createdAt ? new Date(ticket.createdAt) : null
                           } catch {
                             raised = null
                           }
@@ -1597,63 +1765,58 @@ function ApplicationPage() {
                               className={`rounded-xl border border-border bg-muted p-3 shadow-sm ${statusBorderClass}`}
                             >
                               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0 space-y-1">
-                                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#0A1628]/40">
-                                    Reference
+                                <div className="min-w-0">
+                                  <p className="line-clamp-1 text-sm font-semibold text-[#0A1628]">
+                                    {ticket.subject ?? 'Support ticket'}
                                   </p>
-                                  <p className="font-mono text-xs font-medium text-[#0A1628]">
-                                    {ticket.id ?? '—'}
+                                  <p className="mt-0.5 text-[11px] text-[#0A1628]/55">
+                                    Submitted {raisedFull || '—'}
                                   </p>
                                 </div>
-                                <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <span className="inline-flex rounded-full bg-[#0A1628]/6 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#0A1628]/70">
+                                    {ticket.category ?? 'Application'}
+                                  </span>
                                   <span
                                     className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${statusPillClass}`}
                                   >
-                                    {status}
+                                    {getSupportTicketStatusLabel(status)}
                                   </span>
-                                  <p className="max-w-[14rem] text-right text-[10px] leading-snug text-[#0A1628]/55 sm:max-w-[11rem]">
-                                    {statusHint}
-                                  </p>
                                 </div>
                               </div>
 
                               <dl className="mt-3 space-y-2 border-t border-[#0A1628]/8 pt-3 text-xs">
-                                <div>
-                                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-[#0A1628]/45">
-                                    Submitted
-                                  </dt>
-                                  <dd className="mt-0.5 text-[#0A1628]">
-                                    {raisedFull || '—'}
-                                    {raisedFull ? (
-                                      <span className="text-[#0A1628]/45"> (your local time)</span>
-                                    ) : null}
-                                  </dd>
-                                </div>
-                                {ticket.submittedBy ? (
+                                {ticket.applicantEmail ? (
                                   <div>
                                     <dt className="text-[10px] font-semibold uppercase tracking-wide text-[#0A1628]/45">
                                       Contact email
                                     </dt>
                                     <dd className="mt-0.5 break-all text-[#0A1628]">
-                                      {ticket.submittedBy}
+                                      {ticket.applicantEmail}
                                     </dd>
                                   </div>
                                 ) : null}
-                                <div>
-                                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-[#0A1628]/45">
-                                    Subject
-                                  </dt>
-                                  <dd className="mt-0.5 font-semibold text-[#0A1628]">
-                                    {ticket.subject ?? '—'}
-                                  </dd>
+                                <div className="rounded-lg bg-[#0A1628]/[0.03] px-2.5 py-2 text-[11px] leading-snug text-[#0A1628]/65">
+                                  {statusHint}
                                 </div>
                                 <div>
                                   <dt className="text-[10px] font-semibold uppercase tracking-wide text-[#0A1628]/45">
-                                    Your message
+                                    Conversation
                                   </dt>
                                   <dd className="mt-1">
-                                    <div className="max-h-36 overflow-y-auto rounded-lg border border-border bg-card/95 px-3 py-2.5 text-sm leading-relaxed text-[#0A1628]/85 [overflow-wrap:anywhere] whitespace-pre-wrap">
-                                      {ticket.message ?? '—'}
+                                    <div className="max-h-40 space-y-2 overflow-y-auto rounded-lg border border-border bg-card/95 px-3 py-2.5 text-sm leading-relaxed text-[#0A1628]/85 [overflow-wrap:anywhere] whitespace-pre-wrap">
+                                      {(Array.isArray(ticket.messages) ? ticket.messages : []).length ? (
+                                        ticket.messages.map((message) => (
+                                          <div key={message.id} className="rounded-md bg-white px-2 py-1.5">
+                                            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#0A1628]/45">
+                                              {message.from === 'admin' ? 'Admin reply' : 'You'} · {formatWhen(message.sentAt)}
+                                            </p>
+                                            <p className="mt-0.5">{message.body}</p>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <p>—</p>
+                                      )}
                                     </div>
                                   </dd>
                                 </div>

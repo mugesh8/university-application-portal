@@ -14,6 +14,7 @@ function AppRouter() {
     isAuthenticated: false,
     email: '',
     token: '',
+    userId: '',
   })
   const authPrefixRef = useRef(import.meta.env.VITE_AUTH_PREFIX || '/api/auth')
 
@@ -79,7 +80,8 @@ function AppRouter() {
     )
 
     const token = payload.token || payload.data?.token || payload.accessToken || ''
-    setAuthSession({ isAuthenticated: true, email: normalizedEmail, token })
+    const userId = payload.data?.user?.id || payload.user?.id || ''
+    setAuthSession({ isAuthenticated: true, email: normalizedEmail, token, userId })
   }
 
   return (
